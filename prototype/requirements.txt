@@ -1,0 +1,9 @@
+# Reference implementation + training (Python 3.11-3.13). The mobile app is Flutter;
+# this package only trains the model and defines the behaviour the app must match.
+numpy>=2.0
+opencv-python-headless>=4.9
+Pillow>=10.1
+chess>=1.11        # python-chess: FEN/PGN + legality (reference for the Dart side)
+PyMuPDF>=1.24      # rasterises SVG piece sets for synthetic data
+tensorflow>=2.18   # Keras training + TFLite export (target runtime: flutter_litert)
+pytest>=8
