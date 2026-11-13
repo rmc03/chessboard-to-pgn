@@ -4,10 +4,16 @@ Convierte la imagen de un **diagrama de ajedrez digital** (captura de pantalla, 
 en un archivo **PGN** con la posición exacta, ejecutándose **100 % en local** (Android con Flutter).
 Las fotos de tableros físicos son un objetivo posterior y requerirán una captura guiada.
 
-> Estado: **fase 1 (prototipo de referencia en Python)**. Aún no hay app Flutter.
+> Estado: **prototipo de referencia en Python** (`prototype/`) y **app Flutter de prueba** (`app/`, Android + Windows).
 > Modelos en [`models/`](models/) (cada uno 212 KiB, mismo `model_contract.json`):
 > - `squares.tflite` — **v3**, genérico + adaptado a la tipografía de un libro real de problemas.
 > - `squares_generic_v2.tflite` — v2, solo estilos sintéticos (falla en el libro, ver abajo).
+
+## App Flutter de prueba
+
+Pantalla única (elegir imagen → tableros con las casillas dudosas resaltadas → corregir → copiar PGN), con el modelo
+ejecutado en Dart puro. Ver [`app/README.md`](app/README.md). `.github/workflows/build.yml` compila el APK de Android y
+la carpeta de Windows con cada `push` a `main`.
 
 ## Resultados con capturas reales de un libro (modelo v3)
 

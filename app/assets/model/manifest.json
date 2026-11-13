@@ -1,0 +1,224 @@
+{
+ "input": [
+  32,
+  32,
+  1
+ ],
+ "classes": [
+  ".",
+  "P",
+  "N",
+  "B",
+  "R",
+  "Q",
+  "K",
+  "p",
+  "n",
+  "b",
+  "r",
+  "q",
+  "k"
+ ],
+ "layers": [
+  {
+   "type": "conv3x3",
+   "out": 16,
+   "in": 1,
+   "relu": true,
+   "tensors": [
+    {
+     "offset": 0,
+     "shape": [
+      16,
+      3,
+      3,
+      1
+     ]
+    },
+    {
+     "offset": 576,
+     "shape": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "type": "conv3x3",
+   "out": 16,
+   "in": 16,
+   "relu": true,
+   "tensors": [
+    {
+     "offset": 640,
+     "shape": [
+      16,
+      3,
+      3,
+      16
+     ]
+    },
+    {
+     "offset": 9856,
+     "shape": [
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "type": "maxpool2",
+   "tensors": []
+  },
+  {
+   "type": "conv3x3",
+   "out": 32,
+   "in": 16,
+   "relu": true,
+   "tensors": [
+    {
+     "offset": 9920,
+     "shape": [
+      32,
+      3,
+      3,
+      16
+     ]
+    },
+    {
+     "offset": 28352,
+     "shape": [
+      32
+     ]
+    }
+   ]
+  },
+  {
+   "type": "conv3x3",
+   "out": 32,
+   "in": 32,
+   "relu": true,
+   "tensors": [
+    {
+     "offset": 28480,
+     "shape": [
+      32,
+      3,
+      3,
+      32
+     ]
+    },
+    {
+     "offset": 65344,
+     "shape": [
+      32
+     ]
+    }
+   ]
+  },
+  {
+   "type": "maxpool2",
+   "tensors": []
+  },
+  {
+   "type": "conv3x3",
+   "out": 64,
+   "in": 32,
+   "relu": true,
+   "tensors": [
+    {
+     "offset": 65472,
+     "shape": [
+      64,
+      3,
+      3,
+      32
+     ]
+    },
+    {
+     "offset": 139200,
+     "shape": [
+      64
+     ]
+    }
+   ]
+  },
+  {
+   "type": "conv3x3",
+   "out": 64,
+   "in": 64,
+   "relu": true,
+   "tensors": [
+    {
+     "offset": 139456,
+     "shape": [
+      64,
+      3,
+      3,
+      64
+     ]
+    },
+    {
+     "offset": 286912,
+     "shape": [
+      64
+     ]
+    }
+   ]
+  },
+  {
+   "type": "maxpool2",
+   "tensors": []
+  },
+  {
+   "type": "flatten",
+   "tensors": []
+  },
+  {
+   "type": "dense",
+   "out": 128,
+   "in": 1024,
+   "relu": true,
+   "tensors": [
+    {
+     "offset": 287168,
+     "shape": [
+      128,
+      1024
+     ]
+    },
+    {
+     "offset": 811456,
+     "shape": [
+      128
+     ]
+    }
+   ]
+  },
+  {
+   "type": "dense",
+   "out": 13,
+   "in": 128,
+   "relu": false,
+   "tensors": [
+    {
+     "offset": 811968,
+     "shape": [
+      13,
+      128
+     ]
+    },
+    {
+     "offset": 818624,
+     "shape": [
+      13
+     ]
+    }
+   ]
+  },
+  {
+   "type": "softmax",
+   "tensors": []
+  }
+ ]
+}
