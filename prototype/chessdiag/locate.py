@@ -97,3 +97,57 @@ def find_board(img: np.ndarray, snap: bool = True) -> Box:
     sx0, sx1 = _snap_axis(cv2.GaussianBlur(gx[None], (0, 0), 0.8)[0], x0, x1)
     sy0, sy1 = _snap_axis(cv2.GaussianBlur(gy[None], (0, 0), 0.8)[0], y0, y1)
     return (sx0, sy0, sx1, sy1)
+
+
+CANONICAL_WIDTH = 1080  # screenshots narrower than this are enlarged before looking for frames
+
+
+def find_boards(img: np.ndarray, min_frac: float = 0.12, ink_delta: float = 25.0) -> list[Box]:
+    """All complete, framed boards on a page/screenshot, in reading order (rows, then columns).
+
+    Each diagram has a thin dark frame, which forms one connected component whose bounding
+    box is the board. Wide bars (status bar, rules, titles), thin scrollbars, small captions
+    and boards cut by the screen edge are rejected. Returns [] when no framed board exists:
+    callers then fall back to find_board() on the whole image or ask for a manual crop.
+    """
+    scale = CANONICAL_WIDTH / img.shape[1] if img.shape[1] < 0.93 * CANONICAL_WIDTH else 1.0
+    if scale != 1.0:  # zoomed-out screenshots: frame lines get thinner than the filters can see
+        big = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        return [tuple(v / scale for v in b) for b in _find_boards(big, min_frac, ink_delta)]
+    return _find_boards(img, min_frac, ink_delta)
+
+
+def _find_boards(img: np.ndarray, min_frac: float, ink_delta: float) -> list[Box]:
+    gray = to_gray(img)
+    h, w = gray.shape
+    side = min_frac * min(h, w)
+    # black-hat = "darker than its surroundings": responds to a 1-2 px frame line however much
+    # down-scaling has lightened it, unlike a fixed distance from the page colour
+    k = max(5, int(round(0.0065 * min(h, w)))) | 1
+    ink = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, np.ones((k, k), np.uint8)) > ink_delta
+    if img.ndim == 3:  # UI overlays (page counter, scrollbar) are coloured; the print is neutral
+        rgb = img[..., :3].astype(np.int16)
+        ink &= (rgb.max(axis=2) - rgb.min(axis=2)) < 40
+    ink = ink.astype(np.uint8)
+    # keep only long straight strokes (the frame); digits, captions and glyphs vanish
+    run = max(15, int(0.6 * side))
+    frame = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, run), np.uint8))
+    frame |= cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((run, 1), np.uint8))
+    ink = cv2.morphologyEx(frame, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))  # repair JPEG gaps
+    n, _, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    found = []
+    for x, y, bw, bh, _area in stats[1:]:
+        if min(bw, bh) < side or not 0.85 <= bw / bh <= 1.18:
+            continue
+        if x <= 1 or y <= 1 or x + bw >= w - 1 or y + bh >= h - 1:  # cut by the screen edge
+            continue
+        found.append((float(x), float(y), float(x + bw), float(y + bh)))
+    # reading order: group by row (similar top edge), then left to right
+    found.sort(key=lambda b: b[1])
+    rows: list[list[Box]] = []
+    for b in found:
+        if rows and abs(b[1] - rows[-1][0][1]) < 0.5 * (b[3] - b[1]):
+            rows[-1].append(b)
+        else:
+            rows.append([b])
+    return [b for row in rows for b in sorted(row)]

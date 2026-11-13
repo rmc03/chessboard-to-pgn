@@ -278,24 +278,32 @@ def jitter_box(box, rng: random.Random, amount: float = 0.10):
 
 # ----------------------------------------------------------------------------- datasets
 def _worker(args):
-    seed, n_boards, allow_families = args
+    seed, n_boards, allow_families, book = args  # book: (BookPool, fraction of boards) or None
     rng = random.Random(seed)
     sets = [s for s in build_sprite_sets() if allow_families is None or s.family in allow_families]
     xs, ys = [], []
     for _ in range(n_boards):
         grid = random_grid(rng)
-        img, box, _ = render_board(grid, sets, rng)
+        if book and rng.random() < book[1]:
+            from .book import render_book_board
+
+            img, box = render_book_board(grid, book[0], rng)
+        else:
+            img, box, _ = render_board(grid, sets, rng)
         cells = cut_squares(img, jitter_box(box, rng), SQUARE)
         xs.append((cells * 255).round().astype(np.uint8))
         ys.append(np.asarray(grid, np.int8))
     return np.concatenate(xs), np.concatenate(ys)
 
 
-def make_dataset(n_boards: int, seed: int, families: set[str] | None = None, workers: int = 4):
-    """(X uint8 (n*64, 32, 32), y int8 (n*64,)) rendered from `families` (None = all)."""
+def make_dataset(n_boards: int, seed: int, families: set[str] | None = None, workers: int = 4, book=None):
+    """(X uint8 (n*64, 32, 32), y int8 (n*64,)) rendered from `families` (None = all).
+
+    book = (BookPool, fraction): that fraction of the boards is assembled from real cells of a book.
+    """
     chunks = max(workers * 4, 1)
     per = max(1, n_boards // chunks)
-    jobs = [(seed * 100003 + i, per, families) for i in range(chunks)]
+    jobs = [(seed * 100003 + i, per, families, book) for i in range(chunks)]
     with ProcessPoolExecutor(workers) as ex:
         parts = list(ex.map(_worker, jobs))
     return np.concatenate([p[0] for p in parts]), np.concatenate([p[1] for p in parts])

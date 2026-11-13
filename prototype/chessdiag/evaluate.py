@@ -1,12 +1,17 @@
 """Held-out evaluation on freshly rendered full-page diagrams (locator in the loop)."""
 from __future__ import annotations
 
+import collections
+import json
 import random
+from pathlib import Path
 
+import cv2
 import numpy as np
+from PIL import Image
 
 from .fen import grid_to_placement
-from .pipeline import recognize
+from .pipeline import recognize, recognize_page
 from .synth import build_sprite_sets, random_grid, render_board
 
 
@@ -39,3 +44,35 @@ def evaluate(predictor, n_boards: int, seed: int, families: set[str] | None = No
     if verbose:
         out["failures"] = worst[:5]
     return out
+
+
+def evaluate_pages(predictor, pages_dir: Path, labels_path: Path, pages: set[str] | None = None,
+                   scales=(1.0, 0.7, 0.5, 1.4)) -> dict:
+    """Exact-board accuracy on real screenshots, re-rendered at several phone zoom levels.
+
+    labels.json (written by chessdiag.book label) lists the boards of each page in reading order.
+    A page where the detector finds a different number of boards than expected counts as all wrong.
+    """
+    labels = json.loads(Path(labels_path).read_text())
+    by_page = collections.defaultdict(list)
+    for k in sorted(labels, key=int):
+        by_page[labels[k]["page"]].append(labels[k]["placement"])
+    files = {f.stem: f for f in list(Path(pages_dir).glob("*.jp*g")) + list(Path(pages_dir).glob("*.png"))}
+    report = {}
+    for scale in scales:
+        total = exact = found = 0
+        for page, truth in by_page.items():
+            if pages and page not in pages:
+                continue
+            img = np.array(Image.open(files[page]).convert("RGB"))
+            if scale != 1.0:
+                interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
+                img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=interp)
+                img = cv2.imdecode(cv2.imencode(".jpg", img[..., ::-1], [cv2.IMWRITE_JPEG_QUALITY, 85])[1], cv2.IMREAD_COLOR)[..., ::-1]
+            recs = recognize_page(img, predictor)
+            total += len(truth)
+            found += min(len(recs), len(truth))
+            if len(recs) == len(truth):
+                exact += sum(r.placement == t for r, t in zip(recs, truth))
+        report[f"x{scale}"] = f"{exact}/{total} exact boards ({found} of {total} located)"
+    return report
