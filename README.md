@@ -5,6 +5,35 @@ en un archivo **PGN** con la posición exacta, ejecutándose **100 % en local** 
 Las fotos de tableros físicos son un objetivo posterior y requerirán una captura guiada.
 
 > Estado: **fase 1 (prototipo de referencia en Python)**. Aún no hay app Flutter.
+> El modelo entrenado está en [`models/`](models/) (`squares.tflite`, 212 KiB + `model_contract.json`).
+
+## Resultados medidos (modelo v2)
+
+Todo se mide con **diagramas sintéticos** generados por `chessdiag/synth.py`, salvo la última fila. No son cifras
+de diagramas reales y no hay que leerlas como tales.
+
+| Prueba | Resultado |
+|---|---|
+| Acierto por casilla, validación (cajas con jitter) | 99,8 % |
+| 500 diagramas nuevos, tablero **exacto**, con la caja real | 93,8 % |
+| Igual, pero con el localizador automático en el circuito | 87,2 % (el localizador acierta ~95 %) |
+| Familia de pieza nunca vista (entrenado sin cburnett, evaluado solo con cburnett) | 98,8 % por casilla, 78,3 % de tableros exactos |
+| Diagrama real aportado por el autor (152×122 px, 1 imagen) | 64/64 casillas contra su lectura manual |
+
+Cautelas: la lectura manual del diagrama real la hizo quien escribió el prototipo (con una medición de oscuridad
+de píxeles para la casilla ambigua b6), no es una verdad de terreno independiente, y es **una sola imagen**.
+Con v1 esa misma imagen salía con 1 casilla mal (b6, confianza 0,72), lo que ilustra por qué la app debe resaltar
+las casillas dudosas y permitir corregirlas. En diagramas reales de estilos
+nuevos habrá errores: hay que ampliar los estilos de pieza (ver abajo) antes de fiarse de la precisión.
+
+## Pendiente conocido
+
+- Pocos diseños de pieza reales (solo cburnett + glifos de fuentes). Añadir más conjuntos con licencia libre y
+  permitir que el usuario aporte diagramas corregidos como datos de ajuste.
+- **Licencia del modelo:** se entrenó con renders de cburnett (GPLv2+ / CC BY-SA) y de fuentes DejaVu/FreeFont.
+  Decidir la licencia del repositorio y de los pesos con eso en cuenta antes de publicar.
+- El localizador solo cubre diagramas sobre una página lisa; el resto se recorta con las 4 esquinas de la app.
+- Solo orientación con blancas abajo.
 
 ## Qué se puede y qué no se puede deducir de una imagen
 
