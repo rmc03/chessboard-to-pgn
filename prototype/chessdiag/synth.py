@@ -116,13 +116,18 @@ def random_grid(rng: random.Random) -> list[int]:
     grid[squares.pop()] = CLASSES.index("k")
     n = int(min(30, max(0, rng.triangular(2, 30, 14))))
     kinds = ["P"] * 8 + ["N"] * 2 + ["B"] * 2 + ["R"] * 2 + ["Q"] * 1
+    count = {"white": 1, "black": 1}  # kings already placed; legal limits: 16 pieces, 8 pawns
+    pawns = {"white": 0, "black": 0}
     for sq in squares[:n]:
+        side = "white" if rng.random() < 0.5 else "black"
+        if count[side] >= 16:
+            side = "black" if side == "white" else "white"
         sym = rng.choice(kinds)
-        if rng.random() < 0.5:
-            sym = sym.lower()
-        if sym in "Pp" and (sq < 8 or sq >= 56):
-            sym = rng.choice("NBRQ") if sym == "P" else rng.choice("nbrq")
-        grid[sq] = CLASSES.index(sym)
+        if sym == "P" and (pawns[side] >= 8 or sq < 8 or sq >= 56):
+            sym = rng.choice("NBRQ")
+        pawns[side] += sym == "P"
+        count[side] += 1
+        grid[sq] = CLASSES.index(sym if side == "white" else sym.lower())
     return grid
 
 
@@ -163,7 +168,11 @@ def _prep_sprite(sprite: np.ndarray, c: int, rng: random.Random, bold: int, ax: 
 
 def render_board(grid, sets: list[SpriteSet], rng: random.Random, set_idx: int | None = None):
     """Draw one diagram. Returns (RGB uint8 image, ground-truth board box, SpriteSet used)."""
-    sset = sets[rng.randrange(len(sets))] if set_idx is None else sets[set_idx]
+    if set_idx is None:  # family first, then a set inside it, so no family dominates by count
+        family = rng.choice(sorted({s.family for s in sets}))
+        sset = rng.choice([s for s in sets if s.family == family])
+    else:
+        sset = sets[set_idx]
     cell = int(np.exp(rng.uniform(np.log(11), np.log(64))))
     c = cell * SS
 
