@@ -51,7 +51,7 @@ def evaluate_pages(predictor, pages_dir: Path, labels_path: Path, pages: set[str
     """Exact-board accuracy on real screenshots, re-rendered at several phone zoom levels.
 
     labels.json (written by chessdiag.book label) lists the boards of each page in reading order.
-    A page where the detector finds a different number of boards than expected counts as all wrong.
+    Boards are matched by content, so a board the detector drops is a miss and never shifts the others.
     """
     labels = json.loads(Path(labels_path).read_text())
     by_page = collections.defaultdict(list)
@@ -71,8 +71,11 @@ def evaluate_pages(predictor, pages_dir: Path, labels_path: Path, pages: set[str
                 img = cv2.imdecode(cv2.imencode(".jpg", img[..., ::-1], [cv2.IMWRITE_JPEG_QUALITY, 85])[1], cv2.IMREAD_COLOR)[..., ::-1]
             recs = recognize_page(img, predictor)
             total += len(truth)
-            found += min(len(recs), len(truth))
-            if len(recs) == len(truth):
-                exact += sum(r.placement == t for r, t in zip(recs, truth))
-        report[f"x{scale}"] = f"{exact}/{total} exact boards ({found} of {total} located)"
+            found += len(recs)
+            remaining = list(truth)  # a board counts when its content equals a still-unclaimed true position
+            for r in recs:
+                if r.placement in remaining:
+                    remaining.remove(r.placement)
+                    exact += 1
+        report[f"x{scale}"] = f"{exact}/{total} boards exactly right, {found} detected"
     return report

@@ -150,4 +150,8 @@ def _find_boards(img: np.ndarray, min_frac: float, ink_delta: float) -> list[Box
             rows[-1].append(b)
         else:
             rows.append([b])
-    return [b for row in rows for b in sorted(row)]
+    ordered = [b for row in rows for b in sorted(row)]
+    if len(ordered) >= 4:  # one typeface/layout per page: a box far from the median size is a damaged frame
+        median = float(np.median([b[2] - b[0] for b in ordered]))
+        ordered = [b for b in ordered if abs((b[2] - b[0]) - median) <= 0.08 * median and abs((b[3] - b[1]) - median) <= 0.08 * median]
+    return ordered
