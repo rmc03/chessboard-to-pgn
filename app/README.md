@@ -33,9 +33,9 @@ desplaza hasta verlos enteros, o recórtalos a mano.
 | `pipeline.dart` | `pipeline.py`, `squares.py` — recorte de 64 casillas y todo el recorrido (en *isolates*); `prepareRegion` para el recorte manual |
 
 Se evita un plugin de TFLite a propósito: es lo que suele romper las compilaciones de escritorio y de CI. La red
-(~9,7 M de multiplicaciones por casilla) cuesta unos **0,9 s por tablero** compilada en nativo en un portátil de
-4 núcleos (1,4 s en modo depuración); en un móvil será más lento, y los tableros de una página se clasifican en
-paralelo. Si hace falta velocidad, el plan es pasar a LiteRT: el contrato del modelo no cambia.
+(~9,7 M de multiplicaciones por casilla) calcula 4 canales a la vez con `Float32x4` (SIMD: NEON en ARM, SSE en x86):
+**~0,25 s por tablero** compilada en nativo en un servidor de 4 núcleos (`tool/bench_classifier.dart`; antes ~0,9 s).
+En un móvil será más lento (no medido), y los tableros de una página se clasifican en paralelo.
 
 ## Probar y ejecutar
 

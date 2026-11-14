@@ -209,8 +209,15 @@ jobs:
           size() { numfmt --to=iec --suffix=B --format=%.1f "$(stat -c%s "dist/$1")"; }
           P="$APP-$VERSION"
           {
-            echo "Primera versión de prueba de **Chess to PGN**: convierte una imagen con diagramas de ajedrez (captura, foto de página) en PGN, **100 % en el dispositivo y sin conexión**. Corrige las casillas dudosas y copia el PGN."
+            echo "**Chess to PGN** convierte una imagen con diagramas de ajedrez (captura, foto de página) en PGN, **100 % en el dispositivo y sin conexión**. Corrige las casillas dudosas y copia, comparte o guarda el PGN."
             echo
+            # "## Novedades": the section of CHANGELOG.md for this version, if there is one
+            awk -v v="## $VERSION" '$0 == v {on = 1; next} on && /^## / {exit} on' CHANGELOG.md > changes.md 2>/dev/null || true
+            if [ -s changes.md ]; then
+              echo "## Novedades"
+              cat changes.md
+              echo
+            fi
             echo "## Android"
             echo
             echo "| Archivo | Tamaño | Para quién |"
@@ -234,8 +241,8 @@ jobs:
             echo
             echo "## Notas"
             echo
-            echo "- Sin recorte manual: si un diagrama no tiene marco se usa la imagen entera, y los tableros cortados por el borde de la pantalla se ignoran."
-            echo "- Un móvil tarda unos segundos por tablero; las casillas en ámbar son las dudosas."
+            echo "- Si un diagrama no se detecta o se lee mal, usa **Recortar a mano**. Los tableros cortados por el borde de la pantalla se ignoran."
+            echo "- Las casillas en ámbar son las dudosas: tócalas para corregirlas."
             echo "- Sumas SHA-256 en \`SHA256SUMS.txt\`."
           } > notes.md
           gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Chess to PGN $VERSION" --notes-file notes.md

@@ -31,7 +31,7 @@ reglas del ajedrez (24/24 legales)**; no hay etiquetas de una persona independie
   conocido*, **no** generalización a otros libros. La muestra es pequeña (8 tableros).
 - Los fallos por debajo de 0,85× vienen del **detector de tableros** (el marco fino se pierde, o el contador de página
   tapa una esquina), no del clasificador: recortando los tableros con su caja correcta, el modelo lee 8/8 incluso
-  reducidos a 122 px. Si el detector no está seguro la app debe pedir el recorte manual de 4 esquinas.
+  reducidos a 122 px. Si el detector falla, la app ofrece **Recortar a mano**.
 - **Coste en otro estilo:** en el primer diagrama de prueba (otro libro, 152×122 px) v2 acertaba las 64 casillas y v3
   falla una (a4, dama blanca leída como negra, marcada como dudosa). Especializar en un libro desplaza las fronteras
   de decisión para los demás, de ahí que se conserve v2 como modelo genérico.
@@ -68,7 +68,7 @@ nuevos habrá errores: hay que ampliar los estilos de pieza (ver abajo) antes de
   etiquetas **no** están en el repositorio (`prototype/data/` está en `.gitignore`), pero los pesos sí. Decidir la
   licencia del repositorio y de los pesos con eso en cuenta antes de publicar.
 - El detector de varios tableros exige un marco fino alrededor de cada diagrama y es fiable desde ~0,7× de una captura
-  de 1080 px de ancho; el resto se recorta con las 4 esquinas de la app. Descarta cajas de tamaño anómalo.
+  de 1080 px de ancho; el resto se recorta a mano en la app. Descarta cajas de tamaño anómalo.
 - Solo orientación con blancas abajo.
 
 ## Qué se puede y qué no se puede deducir de una imagen
@@ -91,7 +91,7 @@ Ningún modelo garantiza el 100 % de aciertos, así que la app tendrá una **pan
 | Capa | Elección |
 |---|---|
 | App | Flutter / Dart (Android primero), código abierto |
-| Recorte | 4 esquinas arrastrables (siempre disponible) + autodetección para diagramas planos |
+| Recorte | Autodetección para diagramas planos + rectángulo de recorte a mano en la app (un recorte aproximado basta) |
 | Clasificación | CNN pequeña, 13 clases por casilla (32×32 gris), exportada a `.tflite` |
 | Runtime móvil | `flutter_litert` (sucesor de `tflite_flutter`) |
 | Reglas / PGN en la app | `dartchess` (GPL-3.0, compatible con un proyecto abierto) |
@@ -101,8 +101,8 @@ Descartado: YOLO de Ultralytics (AGPL-3.0, más pesado y innecesario para diagra
 
 ## Pipeline (lo que la app debe replicar)
 
-0. `locate.find_boards` (solo capturas con varios diagramas) — marco fino de cada tablero con un filtro *black-hat* y trazos largos y rectos; descarta barras, contadores de color, pies y cajas de tamaño anómalo.
-1. `locate.find_board` — caja del tablero (moda del borde = fondo de página → columnas/filas con “tinta” densa → ajuste a una rejilla de 9 líneas equiespaciadas).
+0. `locate.find_boards` (solo capturas con varios diagramas) — marco fino de cada tablero con un filtro *black-hat* y trazos largos y rectos; descarta barras, contadores de color, pies, cajas de tamaño anómalo y todo lo que no alterne casillas claras y oscuras como un tablero 8×8 (p. ej. una casilla rayada suelta dentro de un recorte). En capturas estrechas amplía la imagen y relaja el umbral en proporción.
+1. `locate.find_board` — caja del tablero. Tres hipótesis por eje, gana la más «cuadriculada» (las 7 líneas interiores con borde fuerte y los centros de casilla tranquilos): la caja de “tinta” dentro del margen de página ajustada a 9 líneas equiespaciadas, una cuadrícula algo metida dentro de ella (marco grueso, o marco que rodea márgenes y coordenadas) y una cuadrícula que ocupa toda la imagen (recorte justo en el borde o cortando un poco las casillas).
 2. `squares.cut_squares` — 64 recortes 32×32 en gris, rango `[0,1]`, orden a8→h1.
 3. Modelo `squares.tflite` (batch fijo de 64) → probabilidades `(64, 13)`.
 4. `fen.decode` — decodificación con reglas: un rey por bando, sin peones en 1ª/8ª, ≤ 8 peones por bando.

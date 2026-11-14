@@ -10,15 +10,16 @@ from . import CLASSES
 from .squares import SQUARE
 
 BATCH = 64  # the exported model classifies the 64 squares of a board in a single call
+WIDTHS = (16, 32, 64)  # conv filters per stage (two 3x3 convs each); multiples of 4 for the Dart SIMD port
 
 
-def build_model(batch_size: int | None = None):
+def build_model(batch_size: int | None = None, widths: tuple[int, ...] = WIDTHS):
     import keras
     from keras import layers
 
     inp = keras.Input(batch_shape=(batch_size, SQUARE, SQUARE, 1))
     x = inp
-    for filters in (16, 32, 64):
+    for filters in widths:
         for _ in range(2):
             x = layers.Conv2D(filters, 3, padding="same", use_bias=False)(x)
             x = layers.BatchNormalization()(x)
@@ -31,11 +32,12 @@ def build_model(batch_size: int | None = None):
     return keras.Model(inp, out)
 
 
-def train(X: np.ndarray, y: np.ndarray, Xv: np.ndarray, yv: np.ndarray, epochs: int = 10):
+def train(X: np.ndarray, y: np.ndarray, Xv: np.ndarray, yv: np.ndarray, epochs: int = 10,
+          widths: tuple[int, ...] = WIDTHS):
     import keras
     import tensorflow as tf
 
-    model = build_model()
+    model = build_model(widths=widths)
     model.compile(
         optimizer=keras.optimizers.Adam(2e-3),
         loss="sparse_categorical_crossentropy",
@@ -59,11 +61,11 @@ def predict_keras(model):
     return f
 
 
-def export_tflite(model, out_dir: Path) -> Path:
+def export_tflite(model, out_dir: Path, widths: tuple[int, ...] = WIDTHS) -> Path:
     """Fixed-batch (64,32,32,1) float32 model + a JSON contract the Flutter side reads."""
     import tensorflow as tf
 
-    fixed = build_model(BATCH)
+    fixed = build_model(BATCH, widths)
     fixed.set_weights(model.get_weights())
     conv = tf.lite.TFLiteConverter.from_keras_model(fixed)
     conv.optimizations = [tf.lite.Optimize.DEFAULT]  # dynamic-range int8 weights, float I/O
