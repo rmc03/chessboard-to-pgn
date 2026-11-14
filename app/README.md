@@ -116,4 +116,4 @@ se instalen sobre las anteriores.** El flujo los usa solo si existen; `android/k
 ## Nombre, icono y versión
 
 Nombre visible «Chess to PGN». Los iconos (Android adaptativo y clásico, Windows `.ico`) salen de `python3 tool/make_icons.py`.
-La versión es la de `pubspec.yaml` (`0.1.0+1` → etiqueta `v0.1.0`).
+La versión es la de `pubspec.yaml` (`0.2.0+2` → etiqueta `v0.2.0`); las novedades de cada versión van en `CHANGELOG.md`.
