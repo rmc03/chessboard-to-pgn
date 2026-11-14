@@ -184,7 +184,9 @@ def find_boards(img: np.ndarray, min_frac: float = 0.12, ink_delta: float = 25.0
     scale = CANONICAL_WIDTH / img.shape[1] if img.shape[1] < 0.93 * CANONICAL_WIDTH else 1.0
     if scale != 1.0:  # zoomed-out screenshots: frame lines get thinner than the filters can see
         big = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        return [tuple(v / scale for v in b) for b in _find_boards(big, min_frac, ink_delta)]
+        # enlarging also spreads and lightens a 1 px frame line: lower contrast, wider gaps to bridge
+        return [tuple(v / scale for v in b)
+                for b in _find_boards(big, min_frac, ink_delta / scale, int(round(7 * scale)) | 1)]
     return _find_boards(img, min_frac, ink_delta)
 
 
@@ -235,7 +237,7 @@ def _is_board(img: np.ndarray, gray: np.ndarray, box: Box) -> bool:
     return _board_like(to_gray(crop), inner)
 
 
-def _find_boards(img: np.ndarray, min_frac: float, ink_delta: float) -> list[Box]:
+def _find_boards(img: np.ndarray, min_frac: float, ink_delta: float, close: int = 7) -> list[Box]:
     gray = to_gray(img)
     h, w = gray.shape
     side = min_frac * min(h, w)
@@ -251,7 +253,7 @@ def _find_boards(img: np.ndarray, min_frac: float, ink_delta: float) -> list[Box
     run = max(15, int(0.6 * side))
     frame = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, run), np.uint8))
     frame |= cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((run, 1), np.uint8))
-    ink = cv2.morphologyEx(frame, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))  # repair JPEG gaps
+    ink = cv2.morphologyEx(frame, cv2.MORPH_CLOSE, np.ones((close, close), np.uint8))  # repair JPEG gaps
     n, _, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
     found = []
     for x, y, bw, bh, _area in stats[1:]:

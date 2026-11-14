@@ -68,25 +68,8 @@ Rgb decodeRgb(Uint8List bytes) {
   );
 }
 
-Rgb resizeBicubic(Rgb src, double scale) {
-  final image = img.Image.fromBytes(
-    width: src.w,
-    height: src.h,
-    bytes: src.data.buffer,
-    numChannels: 3,
-  );
-  final big = img.copyResize(
-    image,
-    width: (src.w * scale).round(),
-    height: (src.h * scale).round(),
-    interpolation: img.Interpolation.cubic,
-  );
-  return Rgb(
-    big.width,
-    big.height,
-    Uint8List.fromList(big.getBytes(order: img.ChannelOrder.rgb)),
-  );
-}
+/// Enlarges zoomed-out screenshots before looking for frames (same filter as OpenCV's INTER_CUBIC).
+Rgb resizeBicubic(Rgb src, double scale) => resizeCubic(src, scale);
 
 /// 64 squares of 32 x 32 floats in [0, 1] for [box] inside [crop]. Fractional boxes are fine.
 Float32List cutSquares(Gray gray, Box box, {int size = squareSize}) {

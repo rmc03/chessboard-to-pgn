@@ -253,3 +253,66 @@ List<ComponentBox> connectedComponents(Uint8List mask, int w, int h) {
   }
   return boxes;
 }
+
+/// OpenCV-compatible bicubic resize (cv2.resize with fx = fy = [scale], INTER_CUBIC): Keys kernel with
+/// a = -0.75, half-pixel centres, clamped borders. The `image` package's cubic filter is softer, which
+/// lightens the 1 px frames that findBoards looks for in zoomed-out screenshots.
+Rgb resizeCubic(Rgb src, double scale) {
+  final dw = (src.w * scale).round(), dh = (src.h * scale).round();
+  const a = -0.75;
+  // per destination coordinate: first source index and 4 weights
+  (Int32List, Float32List) taps(int dst, int n) {
+    final first = Int32List(dst);
+    final w = Float32List(dst * 4);
+    for (var d = 0; d < dst; d++) {
+      final f = (d + 0.5) / scale - 0.5;
+      final s = f.floor();
+      final t = f - s;
+      final w0 = ((a * (t + 1) - 5 * a) * (t + 1) + 8 * a) * (t + 1) - 4 * a;
+      final w1 = ((a + 2) * t - (a + 3)) * t * t + 1;
+      final w2 = ((a + 2) * (1 - t) - (a + 3)) * (1 - t) * (1 - t) + 1;
+      first[d] = s - 1;
+      w[d * 4] = w0;
+      w[d * 4 + 1] = w1;
+      w[d * 4 + 2] = w2;
+      w[d * 4 + 3] = 1 - w0 - w1 - w2;
+    }
+    return (first, w);
+  }
+
+  final (fx, wx) = taps(dw, src.w);
+  final (fy, wy) = taps(dh, src.h);
+  // horizontal pass: src.h x dw x 3 floats
+  final tmp = Float32List(src.h * dw * 3);
+  for (var y = 0; y < src.h; y++) {
+    final row = y * src.w * 3;
+    for (var x = 0; x < dw; x++) {
+      var r = 0.0, g = 0.0, b = 0.0;
+      for (var k = 0; k < 4; k++) {
+        final sx = math.min(math.max(fx[x] + k, 0), src.w - 1);
+        final wk = wx[x * 4 + k];
+        final p = row + sx * 3;
+        r += wk * src.data[p];
+        g += wk * src.data[p + 1];
+        b += wk * src.data[p + 2];
+      }
+      final o = (y * dw + x) * 3;
+      tmp[o] = r;
+      tmp[o + 1] = g;
+      tmp[o + 2] = b;
+    }
+  }
+  // vertical pass, rounded and clamped to 0..255
+  final out = Uint8List(dh * dw * 3);
+  for (var y = 0; y < dh; y++) {
+    for (var x = 0; x < dw * 3; x++) {
+      var v = 0.0;
+      for (var k = 0; k < 4; k++) {
+        final sy = math.min(math.max(fy[y] + k, 0), src.h - 1);
+        v += wy[y * 4 + k] * tmp[sy * dw * 3 + x];
+      }
+      out[y * dw * 3 + x] = v <= 0 ? 0 : (v >= 255 ? 255 : v.round());
+    }
+  }
+  return Rgb(dw, dh, out);
+}
