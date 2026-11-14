@@ -3,7 +3,8 @@
 // Input : 32 x 32 grayscale square, values in [0, 1].
 // Output: 13 class probabilities (see classSymbols in chess.dart).
 // Weights come from `python -m chessdiag.export_dart` (weights.bin: int8 + scales, manifest.json). About 9.7 M
-// multiply-adds per square, so ~0.6 G per board: fine for trying the app, LiteRT is the plan for speed.
+// multiply-adds per square, so ~0.6 G per board. The convolutions and dense layers run 4 output channels at a
+// time with Float32x4 (SIMD on ARM NEON / x86 SSE), weights pre-arranged once so the inner loop is contiguous.
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -20,132 +21,191 @@ class ModelAssets {
 }
 
 abstract class _Layer {
+  /// Output of the layer for [x]. The returned list is owned by the layer and reused on the next call.
   Float32List run(Float32List x);
 }
 
-class _Shape {
-  _Shape(this.h, this.w, this.c);
-  int h, w, c;
-}
+/// Groups of 4 lanes needed for [n] values.
+int _quads(int n) => (n + 3) >> 2;
 
 class _Conv3x3 extends _Layer {
-  _Conv3x3(this.shape, this.cout, this.weights, this.bias, this.relu);
-  final _Shape shape;
-  final int cout;
-  final Float32List weights; // [out][kh][kw][in]
-  final Float32List bias;
-  final bool relu;
-
-  @override
-  Float32List run(Float32List x) {
-    final h = shape.h, w = shape.w, cin = shape.c;
-    final out = Float32List(h * w * cout);
-    for (var y = 0; y < h; y++) {
-      for (var xx = 0; xx < w; xx++) {
-        final obase = (y * w + xx) * cout;
-        for (var o = 0; o < cout; o++) {
-          var acc = bias[o];
-          final wo = o * 9 * cin;
-          for (var dy = 0; dy < 3; dy++) {
-            final iy = y + dy - 1;
-            if (iy < 0 || iy >= h) continue;
-            for (var dx = 0; dx < 3; dx++) {
-              final ix = xx + dx - 1;
-              if (ix < 0 || ix >= w) continue;
-              final xb = (iy * w + ix) * cin;
-              final wb = wo + (dy * 3 + dx) * cin;
-              for (var ci = 0; ci < cin; ci++) {
-                acc += x[xb + ci] * weights[wb + ci];
-              }
-            }
-          }
-          out[obase + o] = relu && acc < 0 ? 0 : acc;
+  /// [weights] as exported: [out][kh][kw][in]. Stored as [kh][kw][in][out] in Float32x4 lanes.
+  _Conv3x3(
+    this.h,
+    this.w,
+    this.cin,
+    this.cout,
+    Float32List weights,
+    Float32List bias,
+    this.relu,
+  ) : q = _quads(cout),
+      _w = Float32x4List(9 * cin * _quads(cout)),
+      _b = Float32x4List(_quads(cout)),
+      _out = Float32List(h * w * _quads(cout) * 4) {
+    final lanes = Float32List.view(_w.buffer);
+    for (var o = 0; o < cout; o++) {
+      for (var k = 0; k < 9; k++) {
+        for (var i = 0; i < cin; i++) {
+          lanes[(k * cin + i) * q * 4 + o] = weights[(o * 9 + k) * cin + i];
         }
       }
     }
-    shape.c = cout;
-    return out;
+    final b = Float32List.view(_b.buffer);
+    for (var o = 0; o < cout; o++) {
+      b[o] = bias[o];
+    }
+    _out4 = Float32x4List.view(_out.buffer);
+  }
+
+  final int h, w, cin, cout, q;
+  final bool relu;
+  final Float32x4List _w, _b;
+  final Float32List _out; // [y][x][q * 4]: channels padded to a multiple of 4 (cout is 16/32/64 here)
+  late final Float32x4List _out4;
+
+  @override
+  Float32List run(Float32List x) {
+    // the input is [y][x][cin] (the previous conv pads cin to a multiple of 4; cin == 1 for the first layer)
+    final out = _out4, wq = _w, b = _b;
+    final zero = Float32x4.zero();
+    for (var y = 0; y < h; y++) {
+      for (var xx = 0; xx < w; xx++) {
+        final ob = (y * w + xx) * q;
+        for (var j = 0; j < q; j++) {
+          out[ob + j] = b[j];
+        }
+        for (var dy = 0; dy < 3; dy++) {
+          final iy = y + dy - 1;
+          if (iy < 0 || iy >= h) continue;
+          for (var dx = 0; dx < 3; dx++) {
+            final ix = xx + dx - 1;
+            if (ix < 0 || ix >= w) continue;
+            final xb = (iy * w + ix) * cin;
+            final wb = (dy * 3 + dx) * cin * q;
+            for (var ci = 0; ci < cin; ci++) {
+              final v = Float32x4.splat(x[xb + ci]);
+              final wr = wb + ci * q;
+              for (var j = 0; j < q; j++) {
+                out[ob + j] += v * wq[wr + j];
+              }
+            }
+          }
+        }
+        if (relu) {
+          for (var j = 0; j < q; j++) {
+            out[ob + j] = out[ob + j].max(zero);
+          }
+        }
+      }
+    }
+    return _out;
   }
 }
 
 class _MaxPool2 extends _Layer {
-  _MaxPool2(this.shape);
-  final _Shape shape;
+  _MaxPool2(this.h, this.w, this.c)
+    : _out = Float32List((h ~/ 2) * (w ~/ 2) * c);
+  final int h, w, c;
+  final Float32List _out;
 
   @override
   Float32List run(Float32List x) {
-    final h = shape.h, w = shape.w, c = shape.c;
     final oh = h ~/ 2, ow = w ~/ 2;
-    final out = Float32List(oh * ow * c);
+    final out = _out;
     for (var y = 0; y < oh; y++) {
       for (var xx = 0; xx < ow; xx++) {
+        final a0 = ((2 * y) * w + 2 * xx) * c, b0 = a0 + c;
+        final d0 = ((2 * y + 1) * w + 2 * xx) * c, e0 = d0 + c;
+        final o0 = (y * ow + xx) * c;
         for (var ch = 0; ch < c; ch++) {
-          final a = x[((2 * y) * w + 2 * xx) * c + ch];
-          final b = x[((2 * y) * w + 2 * xx + 1) * c + ch];
-          final d = x[((2 * y + 1) * w + 2 * xx) * c + ch];
-          final e = x[((2 * y + 1) * w + 2 * xx + 1) * c + ch];
-          out[(y * ow + xx) * c + ch] = math.max(
-            math.max(a, b),
-            math.max(d, e),
+          out[o0 + ch] = math.max(
+            math.max(x[a0 + ch], x[b0 + ch]),
+            math.max(x[d0 + ch], x[e0 + ch]),
           );
         }
       }
     }
-    shape
-      ..h = oh
-      ..w = ow;
     return out;
   }
 }
 
 class _Dense extends _Layer {
-  _Dense(this.nin, this.nout, this.weights, this.bias, this.relu);
-  final int nin, nout;
-  final Float32List weights; // [out][in]
-  final Float32List bias;
+  /// [weights] as exported: [out][in]. Stored as [in][out] in Float32x4 lanes.
+  _Dense(this.nin, this.nout, Float32List weights, Float32List bias, this.relu)
+    : q = _quads(nout),
+      _w = Float32x4List(nin * _quads(nout)),
+      _b = Float32x4List(_quads(nout)),
+      _acc = Float32x4List(_quads(nout)),
+      _out = Float32List(nout) {
+    final lanes = Float32List.view(_w.buffer);
+    for (var o = 0; o < nout; o++) {
+      for (var i = 0; i < nin; i++) {
+        lanes[i * q * 4 + o] = weights[o * nin + i];
+      }
+    }
+    final b = Float32List.view(_b.buffer);
+    for (var o = 0; o < nout; o++) {
+      b[o] = bias[o];
+    }
+  }
+
+  final int nin, nout, q;
   final bool relu;
+  final Float32x4List _w, _b, _acc;
+  final Float32List _out;
 
   @override
   Float32List run(Float32List x) {
-    final out = Float32List(nout);
-    for (var o = 0; o < nout; o++) {
-      var acc = bias[o];
-      final wb = o * nin;
-      for (var i = 0; i < nin; i++) {
-        acc += x[i] * weights[wb + i];
-      }
-      out[o] = relu && acc < 0 ? 0 : acc;
+    final acc = _acc, wq = _w;
+    for (var j = 0; j < q; j++) {
+      acc[j] = _b[j];
     }
-    return out;
+    for (var i = 0; i < nin; i++) {
+      final v = Float32x4.splat(x[i]);
+      final wr = i * q;
+      for (var j = 0; j < q; j++) {
+        acc[j] += v * wq[wr + j];
+      }
+    }
+    final lanes = Float32List.view(acc.buffer);
+    for (var o = 0; o < nout; o++) {
+      final v = lanes[o];
+      _out[o] = relu && v < 0 ? 0 : v;
+    }
+    return _out;
   }
 }
 
 class _Softmax extends _Layer {
+  _Softmax(int n) : _out = Float32List(n);
+  final Float32List _out;
+
   @override
   Float32List run(Float32List x) {
     var m = x[0];
     for (final v in x) {
       if (v > m) m = v;
     }
-    final out = Float32List(x.length);
     var sum = 0.0;
     for (var i = 0; i < x.length; i++) {
       final e = math.exp(x[i] - m);
-      out[i] = e;
+      _out[i] = e;
       sum += e;
     }
     for (var i = 0; i < x.length; i++) {
-      out[i] /= sum;
+      _out[i] /= sum;
     }
-    return out;
+    return _out;
   }
 }
 
 class SquareClassifier {
-  SquareClassifier._(this._build);
-  final List<_Layer> Function() _build;
+  SquareClassifier._(this._layers);
 
-  /// Builds the network from `manifest.json` + `weights.bin` (float32 little-endian).
+  /// Not safe to share between concurrent callers (layers reuse their buffers); each isolate builds its own.
+  final List<_Layer> _layers;
+
+  /// Builds the network from `manifest.json` + `weights.bin`.
   factory SquareClassifier.fromAssets(ModelAssets assets) {
     final manifest = jsonDecode(assets.manifestJson) as Map<String, dynamic>;
     final bytes = ByteData.sublistView(assets.weights);
@@ -176,52 +236,50 @@ class SquareClassifier {
       return out;
     }
 
-    // tensors are decoded once; every run() builds fresh cheap layer objects (the shape is mutable state)
-    final decoded = [
-      for (final s in specs)
-        [
-          for (final t in (s['tensors'] as List).cast<Map<String, dynamic>>())
-            tensor(t),
-        ],
-    ];
-    return SquareClassifier._(() {
-      final shape = _Shape(squareSize, squareSize, 1);
-      final layers = <_Layer>[];
-      for (var i = 0; i < specs.length; i++) {
-        final s = specs[i];
-        switch (s['type'] as String) {
-          case 'conv3x3':
-            layers.add(
-              _Conv3x3(
-                shape,
-                s['out'] as int,
-                decoded[i][0],
-                decoded[i][1],
-                s['relu'] as bool,
-              ),
+    // walk the graph once to know every layer's input shape
+    var h = squareSize, w = squareSize, c = 1;
+    var width = 1; // values per pixel in memory (conv outputs are padded to a multiple of 4 channels)
+    var flat = 0;
+    final layers = <_Layer>[];
+    for (final s in specs) {
+      final t = [
+        for (final x in (s['tensors'] as List).cast<Map<String, dynamic>>())
+          tensor(x),
+      ];
+      switch (s['type'] as String) {
+        case 'conv3x3':
+          final cout = s['out'] as int;
+          if (width != c) {
+            throw FormatException(
+              'conv input with $c channels stored as $width',
             );
-          case 'maxpool2':
-            layers.add(_MaxPool2(shape));
-          case 'flatten':
-            break; // memory is already NHWC contiguous
-          case 'dense':
-            layers.add(
-              _Dense(
-                s['in'] as int,
-                s['out'] as int,
-                decoded[i][0],
-                decoded[i][1],
-                s['relu'] as bool,
-              ),
-            );
-          case 'softmax':
-            layers.add(_Softmax());
-          default:
-            throw FormatException('unknown layer ${s['type']}');
-        }
+          }
+          layers.add(_Conv3x3(h, w, c, cout, t[0], t[1], s['relu'] as bool));
+          c = cout;
+          width = _quads(cout) * 4;
+        case 'maxpool2':
+          layers.add(_MaxPool2(h, w, width));
+          h ~/= 2;
+          w ~/= 2;
+        case 'flatten':
+          if (width != c) {
+            throw FormatException('flatten of $c channels stored as $width');
+          }
+          flat = h * w * c; // memory is already NHWC contiguous
+        case 'dense':
+          final nin = s['in'] as int, nout = s['out'] as int;
+          if (flat != 0 && nin != flat) {
+            throw FormatException('dense expects $nin inputs, got $flat');
+          }
+          layers.add(_Dense(nin, nout, t[0], t[1], s['relu'] as bool));
+          flat = nout;
+        case 'softmax':
+          layers.add(_Softmax(flat));
+        default:
+          throw FormatException('unknown layer ${s['type']}');
       }
-      return layers;
-    });
+    }
+    return SquareClassifier._(layers);
   }
 
   /// [cells] = n squares of 32 x 32 floats in [0, 1], concatenated. Returns n x 13 probabilities.
@@ -231,7 +289,7 @@ class SquareClassifier {
     final out = Float32List(n * classSymbols.length);
     for (var i = 0; i < n; i++) {
       var x = Float32List.sublistView(cells, i * per, (i + 1) * per);
-      for (final layer in _build()) {
+      for (final layer in _layers) {
         x = layer.run(x);
       }
       out.setRange(i * classSymbols.length, (i + 1) * classSymbols.length, x);
