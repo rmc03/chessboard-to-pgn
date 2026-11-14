@@ -311,13 +311,13 @@ List<Box> findBoards(
 }) {
   if (img.w < 0.93 * canonicalWidth && resize != null) {
     final scale = canonicalWidth / img.w;
-    // enlarging also spreads and lightens a 1 px frame line: lower contrast, wider gaps to bridge
+    // enlarging also spreads and lightens a 1 px frame line: lower the contrast it needs in proportion
+    // (closing wider gaps as well would weld frames to nearby bars and text)
     return [
       for (final b in _findBoards(
         resize(img, scale),
         minFrac,
         inkDelta / scale,
-        close: (7 * scale).round() | 1, // odd: the window is centred
       ))
         Box(b.x0 / scale, b.y0 / scale, b.x1 / scale, b.y1 / scale),
     ];
@@ -397,12 +397,7 @@ bool _isBoard(Rgb img, Gray gray, Box box) {
   return _boardLike(crop.toGray(), inner);
 }
 
-List<Box> _findBoards(
-  Rgb img,
-  double minFrac,
-  double inkDelta, {
-  int close = 7,
-}) {
+List<Box> _findBoards(Rgb img, double minFrac, double inkDelta) {
   final gray = img.toGray();
   final w = gray.w, h = gray.h;
   final side = minFrac * math.min(h, w);
@@ -425,7 +420,7 @@ List<Box> _findBoards(
   for (var i = 0; i < w * h; i++) {
     hLines[i] |= vLines[i];
   }
-  final frame = closeSquare(hLines, w, h, close); // repair JPEG gaps
+  final frame = closeSquare(hLines, w, h, 7); // repair JPEG gaps
 
   var found = <Box>[];
   for (final c in connectedComponents(frame, w, h)) {
