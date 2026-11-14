@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chessboard_pgn/src/classifier.dart';
+import 'package:chessboard_pgn/src/locate.dart';
 import 'package:chessboard_pgn/src/pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -38,5 +39,52 @@ void main() {
       expected['page_three_boards.png'],
     );
     expect(boards.every((b) => !b.fallback), isTrue);
+  });
+
+  group('manual region', () {
+    final bytes = File('test/fixtures/page_three_boards.png').readAsBytesSync();
+    final found = prepareBoards(
+      bytes,
+    )[1].box; // 2nd board, as the automatic pass sees it
+
+    Box around(double pad) => Box(
+      found.x0 - pad * found.width,
+      found.y0 - pad * found.height,
+      found.x1 + pad * found.width,
+      found.y1 + pad * found.height,
+    );
+
+    for (final (name, pad) in [
+      ('generous margin', 0.15),
+      ('small margin', 0.05),
+      ('tight crop', 0.0),
+    ]) {
+      test('$name around the 2nd board reads the expected position', () async {
+        final region = around(pad);
+        final prepared = prepareRegion(bytes, region);
+        expect(prepared.manual, isTrue);
+        expect(prepared.fallback, isFalse);
+        // the snapped box is in full-image coordinates, inside the region and close to the automatic one
+        expect(
+          (prepared.box.x0 - found.x0).abs(),
+          lessThan(0.05 * found.width),
+        );
+        expect(
+          (prepared.box.y0 - found.y0).abs(),
+          lessThan(0.05 * found.width),
+        );
+        final board = await recognizeRegion(bytes, region, model);
+        expect(board.manual, isTrue);
+        expect(board.placement, expected['page_three_boards.png']![1]);
+      });
+    }
+
+    test('a region partly outside the image is clamped', () {
+      final prepared = prepareRegion(
+        bytes,
+        Box(found.x0 - 5000, found.y0 - 5000, found.x1 + 5000, found.y1 + 5000),
+      );
+      expect(prepared.manual, isTrue);
+    });
   });
 }

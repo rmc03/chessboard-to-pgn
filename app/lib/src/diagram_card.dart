@@ -11,11 +11,19 @@ class DiagramCard extends StatefulWidget {
     required this.number,
     required this.diagram,
     this.onChanged,
+    this.onAdjust,
+    this.onSharePgn,
   });
 
   final int number;
   final Diagram diagram;
   final VoidCallback? onChanged;
+
+  /// "Ajustar recorte": re-read this diagram from a hand-drawn region. Hidden when null.
+  final VoidCallback? onAdjust;
+
+  /// "Compartir PGN" for this diagram only. Hidden when null.
+  final VoidCallback? onSharePgn;
 
   @override
   State<DiagramCard> createState() => _DiagramCardState();
@@ -54,6 +62,12 @@ class _DiagramCardState extends State<DiagramCard> {
     widget.onChanged?.call();
   }
 
+  void _copy(String text, String what) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text('$what copiado')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final problems = d.problems;
@@ -80,9 +94,45 @@ class _DiagramCardState extends State<DiagramCard> {
                         )
                       : const SizedBox.shrink(),
                 ),
+                PopupMenuButton<String>(
+                  key: const ValueKey('card-menu'),
+                  tooltip: 'Más acciones',
+                  onSelected: (v) {
+                    switch (v) {
+                      case 'fen':
+                        _copy(d.fen, 'FEN');
+                      case 'pgn':
+                        _copy(d.pgn(widget.number), 'PGN');
+                      case 'share':
+                        widget.onSharePgn?.call();
+                      case 'adjust':
+                        widget.onAdjust?.call();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'fen',
+                      child: Text('Copiar FEN'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'pgn',
+                      child: Text('Copiar PGN'),
+                    ),
+                    if (widget.onSharePgn != null)
+                      const PopupMenuItem(
+                        value: 'share',
+                        child: Text('Compartir PGN'),
+                      ),
+                    if (widget.onAdjust != null)
+                      const PopupMenuItem(
+                        value: 'adjust',
+                        child: Text('Ajustar recorte'),
+                      ),
+                  ],
+                ),
               ],
             ),
-            if (d.fallback)
+            if (d.fallback && !d.manual)
               const Padding(
                 padding: EdgeInsets.only(top: 4),
                 child: Text(
@@ -128,14 +178,15 @@ class _DiagramCardState extends State<DiagramCard> {
             ),
             for (final p in problems)
               Text('⚠ $p', style: const TextStyle(color: Color(0xFFC62828))),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                icon: const Icon(Icons.copy),
-                label: const Text('Copiar FEN'),
-                onPressed: () => Clipboard.setData(ClipboardData(text: d.fen)),
+            if (widget.onAdjust != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.crop),
+                  label: const Text('Ajustar recorte'),
+                  onPressed: widget.onAdjust,
+                ),
               ),
-            ),
           ],
         ),
       ),

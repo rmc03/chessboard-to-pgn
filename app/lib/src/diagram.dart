@@ -11,6 +11,7 @@ class Diagram {
     this.castlingPossible = true,
     this.box,
     this.fallback = false,
+    this.manual = false,
   });
 
   factory Diagram.fromRecognized(RecognizedBoard b) => Diagram(
@@ -20,6 +21,7 @@ class Diagram {
     turn: suggestTurn(b.placement) ?? 'w',
     box: b.box,
     fallback: b.fallback,
+    manual: b.manual,
   );
 
   /// Builds a diagram from a FEN placement (all squares fully trusted). Handy for tests.
@@ -36,6 +38,9 @@ class Diagram {
   bool castlingPossible; // true: every right the king/rook placement allows; false: none ('-')
   final Box? box;
   final bool fallback;
+
+  /// The user drew the region by hand.
+  final bool manual;
 
   static const double doubtful = 0.9;
 

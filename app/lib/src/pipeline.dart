@@ -15,7 +15,12 @@ import 'locate.dart';
 
 /// One board's 64 squares, ready for the classifier.
 class PreparedBoard {
-  PreparedBoard(this.box, this.cells, {this.fallback = false});
+  PreparedBoard(
+    this.box,
+    this.cells, {
+    this.fallback = false,
+    this.manual = false,
+  });
 
   /// Board box in image pixels.
   final Box box;
@@ -25,6 +30,9 @@ class PreparedBoard {
 
   /// True when no framed diagram was found and the whole image was treated as one board.
   final bool fallback;
+
+  /// True when the user drew the region by hand (see [prepareRegion]).
+  final bool manual;
 }
 
 class RecognizedBoard {
@@ -33,13 +41,15 @@ class RecognizedBoard {
     this.grid,
     this.confidence,
     this.rawArgmax,
-    this.fallback,
-  );
+    this.fallback, {
+    this.manual = false,
+  });
   final Box box;
   final List<int> grid;
   final List<double> confidence;
   final List<int> rawArgmax;
   final bool fallback;
+  final bool manual;
 
   String get placement => gridToPlacement(grid);
 }
@@ -140,6 +150,34 @@ List<PreparedBoard> prepareBoards(Uint8List imageBytes) {
   return prepared;
 }
 
+/// The board inside a region the user drew by hand (image pixels). The region is clamped to the image and
+/// cropped; [findBoard] snaps to the 8x8 grid inside the crop. If that box looks wrong, the whole crop is
+/// used. The returned box is in full-image coordinates and the board is flagged `manual`.
+PreparedBoard prepareRegion(Uint8List imageBytes, Box region) {
+  final rgb = decodeRgb(imageBytes);
+  // A little extra margin (like prepareBoards) lets findBoard see the frame of a tightly drawn region.
+  final pad = 0.04 * region.width;
+  final x0 = (region.x0 - pad).round().clamp(0, rgb.w - 1);
+  final y0 = (region.y0 - pad).round().clamp(0, rgb.h - 1);
+  final x1 = (region.x1 + pad).round().clamp(x0 + 1, rgb.w);
+  final y1 = (region.y1 + pad).round().clamp(y0 + 1, rgb.h);
+  final crop = rgb.crop(x0, y0, x1, y1);
+  var local = findBoard(crop);
+  final ratio = local.width / local.height;
+  final plausible =
+      (local.width >= 0.5 * crop.w || local.height >= 0.5 * crop.h) &&
+      ratio >= 0.8 &&
+      ratio <= 1.25;
+  if (!plausible) {
+    local = Box(0, 0, crop.w.toDouble(), crop.h.toDouble());
+  }
+  return PreparedBoard(
+    Box(local.x0 + x0, local.y0 + y0, local.x1 + x0, local.y1 + y0),
+    cutSquares(crop.toGray(), local),
+    manual: true,
+  );
+}
+
 RecognizedBoard classifyBoard(ModelAssets model, PreparedBoard board) {
   final probs = SquareClassifier.fromAssets(model).classify(board.cells);
   final d = decode(probs);
@@ -149,6 +187,7 @@ RecognizedBoard classifyBoard(ModelAssets model, PreparedBoard board) {
     d.confidence,
     d.rawArgmax,
     board.fallback,
+    manual: board.manual,
   );
 }
 
@@ -164,3 +203,10 @@ Future<List<RecognizedBoard>> recognizeImage(
     for (final p in prepared) Isolate.run(() => classifyBoard(model, p)),
   ]);
 }
+
+/// [prepareRegion] + classification off the UI thread.
+Future<RecognizedBoard> recognizeRegion(
+  Uint8List imageBytes,
+  Box region,
+  ModelAssets model,
+) => Isolate.run(() => classifyBoard(model, prepareRegion(imageBytes, region)));

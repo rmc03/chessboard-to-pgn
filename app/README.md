@@ -8,9 +8,18 @@ Pantalla única y deliberadamente simple para probar el reconocimiento **100 % e
 3. **Toca una casilla** para corregirla. Elige quién mueve y si se proponen enroques; verás avisos si la posición
    es ilegal (falta un rey, peón en la 1ª/8ª fila, el bando que no mueve está en jaque…).
 4. **Copiar PGN**: un PGN con una partida por diagrama (`[SetUp "1"] [FEN "…"]` y resultado `*`).
+5. **Compartir** (solo Android): hoja de compartir del sistema, como texto (chats) o como archivo `.pgn`
+   (tipo `application/x-chess-pgn`, para abrirlo en una app de ajedrez). En Windows el botón se oculta.
+6. **Guardar .pgn**: diálogo de guardado (Android: selector de documentos del sistema, p. ej. *Descargas*; Windows: diálogo
+   nativo) con el nombre `diagramas-AAAAMMDD-HHMM.pgn` y el mismo texto que «Copiar».
+7. El menú ⋮ de cada tarjeta ofrece Copiar FEN, Copiar PGN, Compartir PGN y Ajustar recorte.
 
-No hay recorte manual todavía: si no hay marco alrededor de los diagramas, se usa la imagen entera como un único
-tablero (se avisa en la tarjeta). Los tableros cortados por el borde de la pantalla se ignoran: desplaza hasta verlos enteros.
+**Recorte a mano.** Si un diagrama no se detecta o se lee mal: **Recortar a mano** (debajo de «Elegir imagen») abre la imagen a
+pantalla completa con un rectángulo ajustable (arrastra las esquinas o el interior; mejor con un poco de margen: el programa
+se ajusta solo a la cuadrícula dentro del recorte) y añade el tablero leído como un diagrama nuevo. **Ajustar recorte** en una
+tarjeta repite la lectura con otro recorte (parte del rectángulo actual) y sustituye ese diagrama. Si no hay ningún marco, se usa la
+imagen entera como un único tablero (se avisa en la tarjeta). Los tableros cortados por el borde de la pantalla se ignoran:
+desplaza hasta verlos enteros, o recórtalos a mano.
 
 ## Cómo funciona (sin plugins nativos de ML)
 
@@ -21,7 +30,7 @@ tablero (se avisa en la tarjeta). Los tableros cortados por el borde de la panta
 | `chess.dart` | `fen.py` — FEN/PGN, decodificación con reglas, jaque |
 | `classifier.dart` | `model.py` — la CNN, ejecutada en Dart puro con los pesos de `assets/model/` |
 | `locate.dart`, `imaging.dart` | `locate.py` — detección de uno o varios tableros |
-| `pipeline.dart` | `pipeline.py`, `squares.py` — recorte de 64 casillas y todo el recorrido (en *isolates*) |
+| `pipeline.dart` | `pipeline.py`, `squares.py` — recorte de 64 casillas y todo el recorrido (en *isolates*); `prepareRegion` para el recorte manual |
 
 Se evita un plugin de TFLite a propósito: es lo que suele romper las compilaciones de escritorio y de CI. La red
 (~9,7 M de multiplicaciones por casilla) cuesta unos **0,9 s por tablero** compilada en nativo en un portátil de
