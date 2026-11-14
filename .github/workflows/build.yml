@@ -1,6 +1,7 @@
-# Builds the simple test app for Android (APK) and Windows (exe folder) on every push to main,
-# after analysing and testing it. Download the results from the run page, section "Artifacts".
-name: Build app (Android + Windows)
+# On every push to main: analyse + test, build the Android APKs (one per CPU architecture and a universal one)
+# and the Windows build, and publish them as a GitHub Release. A release is created once per version: to
+# publish another, raise `version:` in app/pubspec.yaml.
+name: Build and release
 
 on:
   push:
@@ -15,11 +16,13 @@ permissions:
 
 env:
   FLUTTER_VERSION: "3.50.0" # the version the app was analysed and tested with
+  APP: chess-to-pgn
 
 jobs:
   test:
     name: Analyze and test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: app
@@ -35,9 +38,12 @@ jobs:
       - run: flutter test
 
   android:
-    name: Android APK
+    name: Android APKs
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
     defaults:
       run:
         working-directory: app
@@ -54,21 +60,83 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - run: flutter pub get
-      # signed with the debug key (see android/app/build.gradle.kts): installable for testing
-      - run: flutter build apk --release
+
+      # Optional: sign with your own key (see "Firma de release" in app/README.md). Without the secrets the
+      # release build falls back to the debug key.
+      - name: Release signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$PWD/android/release.keystore"
+            {
+              printf 'storeFile=%s\n' "$PWD/android/release.keystore"
+              printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
+              printf 'keyAlias=%s\n' "$KEY_ALIAS"
+              printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+            } > android/key.properties
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No signing secrets: APKs will be signed with the debug key"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Size: one APK per CPU architecture (a phone only needs its own), Dart symbols stripped and names
+      # obfuscated (the symbols are kept as a separate artifact to decode stack traces), R8 + resource
+      # shrinking and icon tree-shaking (Flutter defaults), compressed native libraries (see build.gradle.kts).
+      - name: Build per-architecture APKs
+        run: |
+          VERSION=$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml)
+          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols/split
+          mkdir -p ../dist
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "build/app/outputs/flutter-apk/app-$abi-release.apk" "../dist/$APP-$VERSION-android-$abi.apk"
+          done
+      - name: Build the universal APK
+        run: |
+          VERSION=$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml)
+          flutter build apk --release --obfuscate --split-debug-info=build/symbols/universal
+          cp build/app/outputs/flutter-apk/app-release.apk "../dist/$APP-$VERSION-android-universal.apk"
+
+      - name: Report sizes and signature
+        run: |
+          ls -l ../dist
+          APKSIGNER="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+          for f in ../dist/*.apk; do
+            echo "== $f"; "$APKSIGNER" verify --print-certs "$f" | grep -E "Signer #1 certificate (DN|SHA-256)" || true
+          done
+          {
+            echo "### Android APK sizes"
+            echo '| File | Size |'
+            echo '|---|---|'
+            for f in ../dist/*.apk; do echo "| $(basename "$f") | $(numfmt --to=iec --suffix=B --format=%.2f "$(stat -c%s "$f")") |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: chess-pgn-android-apk
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+          name: chess-to-pgn-android
+          path: dist/*.apk
           if-no-files-found: error
           retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-symbols-android
+          path: app/build/symbols
+          if-no-files-found: error
+          retention-days: 90
 
   windows:
-    name: Windows exe
+    name: Windows x64
     needs: test
     runs-on: windows-latest
+    timeout-minutes: 45
     defaults:
       run:
+        shell: bash
         working-directory: app
     steps:
       - uses: actions/checkout@v4
@@ -78,11 +146,94 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - run: flutter pub get
-      - run: flutter build windows --release
-      # the whole Release folder is needed: chessboard_pgn.exe + DLLs + data/ (assets)
+      - run: flutter build windows --release --obfuscate --split-debug-info=build/symbols
+      - name: Package (maximum compression)
+        run: |
+          VERSION=$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml)
+          OUT="$GITHUB_WORKSPACE/dist/$APP-$VERSION-windows-x64.zip"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cd build/windows/x64/runner/Release
+          ls -l
+          if command -v 7z >/dev/null 2>&1; then
+            7z a -tzip -mx=9 -mfb=258 -mpass=15 "$OUT" . > /dev/null
+          else
+            powershell -NoProfile -Command "Compress-Archive -Path '.\*' -DestinationPath '$(cygpath -w "$OUT")' -CompressionLevel Optimal"
+          fi
+          ls -l "$GITHUB_WORKSPACE/dist"
+          {
+            echo "### Windows build"
+            echo "$(basename "$OUT"): $(du -h "$OUT" | cut -f1) zipped, $(du -sh . | cut -f1) unpacked"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: chess-pgn-windows
-          path: app/build/windows/x64/runner/Release
+          name: chess-to-pgn-windows
+          path: dist/*.zip
           if-no-files-found: error
           retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-symbols-windows
+          path: app/build/symbols
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    name: Publish release
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chess-to-pgn-*
+          path: dist
+          merge-multiple: true
+      - name: Create the release (once per version)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ needs.android.outputs.signed }}
+        run: |
+          VERSION=$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' app/pubspec.yaml)
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists. Raise version: in app/pubspec.yaml to publish a new one."
+            exit 0
+          fi
+          ls -l dist
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+          size() { numfmt --to=iec --suffix=B --format=%.1f "$(stat -c%s "dist/$1")"; }
+          P="$APP-$VERSION"
+          {
+            echo "Primera versión de prueba de **Chess to PGN**: convierte una imagen con diagramas de ajedrez (captura, foto de página) en PGN, **100 % en el dispositivo y sin conexión**. Corrige las casillas dudosas y copia el PGN."
+            echo
+            echo "## Android"
+            echo
+            echo "| Archivo | Tamaño | Para quién |"
+            echo "|---|---|---|"
+            echo "| \`$P-android-arm64-v8a.apk\` | $(size "$P-android-arm64-v8a.apk") | **Recomendado**: casi todos los móviles actuales (64 bits) |"
+            echo "| \`$P-android-armeabi-v7a.apk\` | $(size "$P-android-armeabi-v7a.apk") | Móviles antiguos de 32 bits |"
+            echo "| \`$P-android-x86_64.apk\` | $(size "$P-android-x86_64.apk") | Emuladores y Chromebooks |"
+            echo "| \`$P-android-universal.apk\` | $(size "$P-android-universal.apk") | Funciona en cualquiera de los anteriores (más pesado) |"
+            echo
+            echo "Si no sabes cuál elegir, usa \`arm64-v8a\`; si no se instala, prueba el universal. Hay que permitir «instalar apps desconocidas» para el navegador o el gestor de archivos."
+            echo
+            if [ "$SIGNED" = "true" ]; then
+              echo "Los APK están firmados con la clave de release del proyecto."
+            else
+              echo "> **Firma:** estos APK están firmados con la clave de *depuración* del servidor de compilación, que cambia en cada ejecución. Sirven para probar, pero para instalar una versión posterior habrá que desinstalar esta antes."
+            fi
+            echo
+            echo "## Windows (x64)"
+            echo
+            echo "\`$P-windows-x64.zip\` ($(size "$P-windows-x64.zip")): descomprime **toda** la carpeta y ejecuta \`chessboard_pgn.exe\`. Si Windows lo pide, instala el *Microsoft Visual C++ Redistributable* x64. SmartScreen puede avisar porque el programa no está firmado."
+            echo
+            echo "## Notas"
+            echo
+            echo "- Sin recorte manual: si un diagrama no tiene marco se usa la imagen entera, y los tableros cortados por el borde de la pantalla se ignoran."
+            echo "- Un móvil tarda unos segundos por tablero; las casillas en ámbar son las dudosas."
+            echo "- Sumas SHA-256 en \`SHA256SUMS.txt\`."
+          } > notes.md
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Chess to PGN $VERSION" --notes-file notes.md

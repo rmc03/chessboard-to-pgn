@@ -12,3 +12,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Release signing material (CI writes these from secrets; never commit them)
+*.keystore
+*.jks

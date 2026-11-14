@@ -1,9 +1,10 @@
+// ignore_for_file: avoid_print
 // AOT timing of the pure-Dart classifier:
 //   dart compile exe tool/bench_classifier.dart -o /tmp/bench && /tmp/bench
 import 'dart:io';
 import 'dart:typed_data';
 
-import '../lib/src/classifier.dart';
+import 'package:chessboard_pgn/src/classifier.dart';
 
 void main() {
   final model = ModelAssets(
@@ -22,5 +23,7 @@ void main() {
   for (var i = 0; i < runs; i++) {
     clf.classify(cells);
   }
-  print('64 squares (one board): ${sw.elapsedMilliseconds / runs} ms per board');
+  print(
+    '64 squares (one board): ${sw.elapsedMilliseconds / runs} ms per board',
+  );
 }

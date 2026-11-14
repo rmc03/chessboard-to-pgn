@@ -12,8 +12,8 @@ Las fotos de tableros físicos son un objetivo posterior y requerirán una captu
 ## App Flutter de prueba
 
 Pantalla única (elegir imagen → tableros con las casillas dudosas resaltadas → corregir → copiar PGN), con el modelo
-ejecutado en Dart puro. Ver [`app/README.md`](app/README.md). `.github/workflows/build.yml` compila el APK de Android y
-la carpeta de Windows con cada `push` a `main`.
+ejecutado en Dart puro. Ver [`app/README.md`](app/README.md). `.github/workflows/build.yml` compila Android (APK por
+arquitectura y universal) y Windows con cada `push` a `main` y publica un release de GitHub por versión.
 
 ## Resultados con capturas reales de un libro (modelo v3)
 

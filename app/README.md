@@ -57,12 +57,54 @@ Tras reentrenar (`prototype/`), desde `prototype/`:
 PYTHONPATH=. python -m chessdiag.export_dart --model ../models/squares.tflite --out ../app/assets/model --fixtures ../app/test/fixtures
 ```
 
-Escribe `weights.bin` + `manifest.json` (float32, ~800 KiB) y los datos de referencia de las pruebas, y comprueba que
-las capas exportadas reproducen el modelo TFLite.
+Escribe `weights.bin` + `manifest.json` (pesos `int8` con una escala `float32` por canal de salida, tal y como están en el
+`.tflite`: ~200 KiB, 4 veces menos que en `float32` y sin pérdida) y los datos de referencia de las pruebas. Comprueba que
+el archivo se relee idéntico bit a bit y que las capas exportadas reproducen el modelo TFLite.
 
-## Compilación automática
+## Compilación y release automáticos
 
-`.github/workflows/build.yml` (solo con un `push` a `main`): analiza y prueba, y compila el **APK de Android**
-(firmado con la clave de depuración, instalable para probar) y la carpeta **de Windows** (`chessboard_pgn.exe` + DLL +
-`data/`). Se descargan de la página de la ejecución, en *Artifacts*. Se fija Flutter 3.50.0, la versión con la que se
-probó.
+`.github/workflows/build.yml` (solo con un `push` a `main`): analiza y prueba; compila en paralelo Android y Windows; y
+**publica un release de GitHub** con todo (una sola vez por versión: para publicar otro, sube `version:` en `pubspec.yaml`).
+
+| Archivo del release | Qué es |
+|---|---|
+| `chess-to-pgn-<v>-android-arm64-v8a.apk` | El recomendado: móviles de 64 bits |
+| `…-android-armeabi-v7a.apk` | Móviles antiguos de 32 bits |
+| `…-android-x86_64.apk` | Emuladores y Chromebooks |
+| `…-android-universal.apk` | Las tres arquitecturas en un solo archivo (el más pesado) |
+| `…-windows-x64.zip` | Carpeta completa de Windows (`chessboard_pgn.exe` + DLL + `data/`) |
+| `SHA256SUMS.txt` | Sumas de verificación |
+
+Las tablas de tamaños reales de cada compilación aparecen en el resumen de la ejecución (pestaña *Actions*). Los símbolos
+de depuración (`debug-symbols-*`) se guardan aparte para descifrar trazas de error.
+
+**Qué se hace para ocupar poco**
+
+- Un APK por arquitectura: un móvil solo lleva el motor y el código de su CPU.
+- Código Dart sin símbolos de depuración y con nombres ofuscados (`--split-debug-info --obfuscate`).
+- Reducción de código y recursos de Android (R8) e iconos de Material recortados a los que se usan (valores por defecto de Flutter).
+- Bibliotecas nativas comprimidas dentro del APK (`useLegacyPackaging`): el archivo pesa mucho menos, a cambio de que Android las
+  extraiga al instalar y la app instalada ocupe algo más que el APK. Para lo contrario, quita ese bloque de `android/app/build.gradle.kts`.
+- Pesos del modelo en `int8` (~200 KiB en lugar de ~800 KiB).
+- Sin permiso de Internet: la app es 100 % local.
+- Windows: zip con compresión máxima.
+
+## Firma de release
+
+Sin firma propia, el CI firma con la clave de *depuración* de cada ejecución: sirve para probar, pero cada compilación tiene una
+firma distinta y una actualización no se instala sobre la anterior sin desinstalarla. Para firmar siempre con la misma clave,
+crea una y guárdala como secretos del repositorio (Settings → Secrets and variables → Actions):
+
+```bash
+keytool -genkeypair -v -keystore release.keystore -alias chess -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 release.keystore            # → secreto ANDROID_KEYSTORE_BASE64
+# además: ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS (chess) y ANDROID_KEY_PASSWORD
+```
+
+**Guarda `release.keystore` y sus contraseñas en un sitio seguro: si se pierden, no se podrán publicar actualizaciones que
+se instalen sobre las anteriores.** El flujo los usa solo si existen; `android/key.properties` y los `.keystore` están en `.gitignore`.
+
+## Nombre, icono y versión
+
+Nombre visible «Chess to PGN». Los iconos (Android adaptativo y clásico, Windows `.ico`) salen de `python3 tool/make_icons.py`.
+La versión es la de `pubspec.yaml` (`0.1.0+1` → etiqueta `v0.1.0`).

@@ -2,7 +2,7 @@
 //
 // Input : 32 x 32 grayscale square, values in [0, 1].
 // Output: 13 class probabilities (see classSymbols in chess.dart).
-// Weights come from `python -m chessdiag.export_dart` (weights.bin + manifest.json). About 9.7 M
+// Weights come from `python -m chessdiag.export_dart` (weights.bin: int8 + scales, manifest.json). About 9.7 M
 // multiply-adds per square, so ~0.6 G per board: fine for trying the app, LiteRT is the plan for speed.
 import 'dart:convert';
 import 'dart:math' as math;
@@ -151,13 +151,27 @@ class SquareClassifier {
     final bytes = ByteData.sublistView(assets.weights);
     final specs = (manifest['layers'] as List).cast<Map<String, dynamic>>();
 
+    // "f32": plain float32. "i8": int8 values followed (at scales_offset) by one float32 scale per output
+    // channel, exactly as stored in the TFLite model; value = int8 * scale.
     Float32List tensor(Map<String, dynamic> t) {
       final shape = (t['shape'] as List).cast<int>();
       final n = shape.fold<int>(1, (a, b) => a * b);
       final offset = t['offset'] as int;
       final out = Float32List(n);
-      for (var i = 0; i < n; i++) {
-        out[i] = bytes.getFloat32(offset + 4 * i, Endian.little);
+      if (t['dtype'] == 'i8') {
+        final scalesOffset = t['scales_offset'] as int;
+        final channels = shape.first, perChannel = n ~/ channels;
+        for (var o = 0; o < channels; o++) {
+          final scale = bytes.getFloat32(scalesOffset + 4 * o, Endian.little);
+          for (var i = 0; i < perChannel; i++) {
+            out[o * perChannel + i] =
+                bytes.getInt8(offset + o * perChannel + i) * scale;
+          }
+        }
+      } else {
+        for (var i = 0; i < n; i++) {
+          out[i] = bytes.getFloat32(offset + 4 * i, Endian.little);
+        }
       }
       return out;
     }

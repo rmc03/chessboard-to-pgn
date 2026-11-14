@@ -7,7 +7,8 @@ is fast enough to try the app on Android and Windows without any native TFLite p
 broken desktop/CI builds). LiteRT stays the plan for speed later; model_contract.json is unchanged.
 
 Outputs
-  weights.bin / manifest.json   float32 little-endian, dequantised from the .tflite, layer by layer
+  weights.bin / manifest.json   layer by layer: int8 weights + float32 per-output-channel scales exactly as stored
+                                in the .tflite (4x smaller than float32, bit-identical once dequantised), float32 biases
   fixtures/golden_cells.bin     64 squares (uint8 0..255, 32x32) + golden_probs.json from the real TFLite model
   fixtures/*.png + expected.json  synthetic diagram/page images and what the Python pipeline reads from them
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
@@ -26,18 +28,27 @@ from . import CLASSES
 from .squares import SQUARE
 
 
-def _dequantised(interp, tensors, k: int) -> np.ndarray:
+@dataclass
+class Layer:
+    spec: dict
+    arrays: list  # float32 tensors for the numpy reference (dequantised)
+    quant: list = field(default_factory=list)  # per tensor: (int8 array, float32 scales) or None
+
+
+def _tensor(interp, tensors, k: int):
+    """(float32 array, (int8 array, scales) | None). int8 tensors are symmetric, per output channel."""
     t, a = tensors[k], interp.get_tensor(k)
     if a.dtype != np.int8:
-        return a.astype(np.float32)
+        return a.astype(np.float32), None
     q = t["quantization_parameters"]
-    shape = [1] * a.ndim
-    shape[q["quantized_dimension"]] = -1
-    return ((a.astype(np.float32) - q["zero_points"].reshape(shape)) * q["scales"].reshape(shape)).astype(np.float32)
+    assert q["quantized_dimension"] == 0 and not np.any(q["zero_points"]), "expected symmetric per-output-channel int8"
+    scales = q["scales"].astype(np.float32)
+    dequantised = (a.astype(np.float32) * scales.reshape([-1] + [1] * (a.ndim - 1))).astype(np.float32)
+    return dequantised, (a.copy(), scales)
 
 
 def read_graph(model: Path):
-    """[(layer dict, [arrays])] in execution order, from the dequantised .tflite."""
+    """(interpreter, [Layer]) in execution order, from the .tflite."""
     import tensorflow as tf
 
     interp = tf.lite.Interpreter(model_path=str(model))
@@ -47,24 +58,25 @@ def read_graph(model: Path):
     for op in interp._get_ops_details():
         name = op["op_name"]
         if name == "CONV_2D":
-            w, b = (_dequantised(interp, tensors, op["inputs"][i]) for i in (1, 2))
-            layers.append(({"type": "conv3x3", "out": int(w.shape[0]), "in": int(w.shape[3]), "relu": True}, [w, b]))
+            (w, qw), (b, qb) = (_tensor(interp, tensors, op["inputs"][i]) for i in (1, 2))
+            layers.append(Layer({"type": "conv3x3", "out": int(w.shape[0]), "in": int(w.shape[3]), "relu": True}, [w, b], [qw, qb]))
         elif name == "MAX_POOL_2D":
-            layers.append(({"type": "maxpool2"}, []))
+            layers.append(Layer({"type": "maxpool2"}, []))
         elif name == "RESHAPE":
-            layers.append(({"type": "flatten"}, []))
+            layers.append(Layer({"type": "flatten"}, []))
         elif name == "FULLY_CONNECTED":
-            w, b = (_dequantised(interp, tensors, op["inputs"][i]) for i in (1, 2))
+            (w, qw), (b, qb) = (_tensor(interp, tensors, op["inputs"][i]) for i in (1, 2))
             fc_seen += 1
-            layers.append(({"type": "dense", "out": int(w.shape[0]), "in": int(w.shape[1]), "relu": fc_seen == 1}, [w, b]))
+            layers.append(Layer({"type": "dense", "out": int(w.shape[0]), "in": int(w.shape[1]), "relu": fc_seen == 1}, [w, b], [qw, qb]))
         elif name == "SOFTMAX":
-            layers.append(({"type": "softmax"}, []))
+            layers.append(Layer({"type": "softmax"}, []))
     return interp, layers
 
 
 def reference_forward(layers, x: np.ndarray) -> np.ndarray:
     """numpy forward pass over the exported layers: x (N, 32, 32, 1) float32 -> (N, 13) probabilities."""
-    for spec, arrays in layers:
+    for layer in layers:
+        spec, arrays = layer.spec, layer.arrays
         t = spec["type"]
         if t == "conv3x3":
             w, b = arrays  # w: [out][kh][kw][in]
@@ -93,20 +105,45 @@ def reference_forward(layers, x: np.ndarray) -> np.ndarray:
 def export_weights(model: Path, out: Path) -> tuple:
     interp, layers = read_graph(model)
     out.mkdir(parents=True, exist_ok=True)
-    blob, manifest, offset = bytearray(), [], 0
-    for spec, arrays in layers:
-        spec = dict(spec)
+    blob, manifest = bytearray(), []
+    for layer in layers:
+        spec = dict(layer.spec)
         spec["tensors"] = []
-        for a in arrays:
-            raw = np.ascontiguousarray(a, dtype="<f4").tobytes()
-            spec["tensors"].append({"offset": offset, "shape": list(a.shape)})
-            blob += raw
-            offset += len(raw)
+        quant = layer.quant or [None] * len(layer.arrays)
+        for a, q in zip(layer.arrays, quant):
+            entry = {"shape": list(a.shape), "offset": len(blob)}
+            if q is None:
+                entry["dtype"] = "f32"
+                blob += np.ascontiguousarray(a, dtype="<f4").tobytes()
+            else:  # int8 values, then one float32 scale per output channel
+                entry["dtype"] = "i8"
+                blob += np.ascontiguousarray(q[0], dtype=np.int8).tobytes()
+                entry["scales_offset"] = len(blob)
+                blob += np.ascontiguousarray(q[1], dtype="<f4").tobytes()
+            spec["tensors"].append(entry)
         manifest.append(spec)
     (out / "weights.bin").write_bytes(bytes(blob))
     (out / "manifest.json").write_text(json.dumps(
         {"input": [SQUARE, SQUARE, 1], "classes": [c or "." for c in CLASSES], "layers": manifest}, indent=1))
+    check_round_trip(out, layers)
     return interp, layers
+
+
+def check_round_trip(out: Path, layers) -> None:
+    """Read weights.bin back the way the Dart loader does (int8 * float32 scale) and demand bit-identical floats."""
+    blob = (out / "weights.bin").read_bytes()
+    manifest = json.loads((out / "manifest.json").read_text())["layers"]
+    for layer, spec in zip(layers, manifest):
+        for expected, t in zip(layer.arrays, spec["tensors"]):
+            n = int(np.prod(t["shape"]))
+            if t["dtype"] == "f32":
+                got = np.frombuffer(blob, "<f4", n, t["offset"]).reshape(t["shape"])
+            else:
+                q = np.frombuffer(blob, np.int8, n, t["offset"]).reshape(t["shape"])
+                scales = np.frombuffer(blob, "<f4", t["shape"][0], t["scales_offset"])
+                got = (q.astype(np.float32) * scales.reshape([-1] + [1] * (q.ndim - 1))).astype(np.float32)
+            assert np.array_equal(got, expected), "weights.bin does not read back to the exported tensors"
+    print(f"weights.bin round-trips bit-identically ({len(blob) // 1024} KiB)")
 
 
 def export_fixtures(model: Path, interp, layers, fixtures: Path) -> None:

@@ -27,19 +27,21 @@
    "relu": true,
    "tensors": [
     {
-     "offset": 0,
      "shape": [
       16,
       3,
       3,
       1
-     ]
+     ],
+     "offset": 0,
+     "dtype": "f32"
     },
     {
-     "offset": 576,
      "shape": [
       16
-     ]
+     ],
+     "offset": 576,
+     "dtype": "f32"
     }
    ]
   },
@@ -50,19 +52,22 @@
    "relu": true,
    "tensors": [
     {
-     "offset": 640,
      "shape": [
       16,
       3,
       3,
       16
-     ]
+     ],
+     "offset": 640,
+     "dtype": "i8",
+     "scales_offset": 2944
     },
     {
-     "offset": 9856,
      "shape": [
       16
-     ]
+     ],
+     "offset": 3008,
+     "dtype": "f32"
     }
    ]
   },
@@ -77,19 +82,22 @@
    "relu": true,
    "tensors": [
     {
-     "offset": 9920,
      "shape": [
       32,
       3,
       3,
       16
-     ]
+     ],
+     "offset": 3072,
+     "dtype": "i8",
+     "scales_offset": 7680
     },
     {
-     "offset": 28352,
      "shape": [
       32
-     ]
+     ],
+     "offset": 7808,
+     "dtype": "f32"
     }
    ]
   },
@@ -100,19 +108,22 @@
    "relu": true,
    "tensors": [
     {
-     "offset": 28480,
      "shape": [
       32,
       3,
       3,
       32
-     ]
+     ],
+     "offset": 7936,
+     "dtype": "i8",
+     "scales_offset": 17152
     },
     {
-     "offset": 65344,
      "shape": [
       32
-     ]
+     ],
+     "offset": 17280,
+     "dtype": "f32"
     }
    ]
   },
@@ -127,19 +138,22 @@
    "relu": true,
    "tensors": [
     {
-     "offset": 65472,
      "shape": [
       64,
       3,
       3,
       32
-     ]
+     ],
+     "offset": 17408,
+     "dtype": "i8",
+     "scales_offset": 35840
     },
     {
-     "offset": 139200,
      "shape": [
       64
-     ]
+     ],
+     "offset": 36096,
+     "dtype": "f32"
     }
    ]
   },
@@ -150,19 +164,22 @@
    "relu": true,
    "tensors": [
     {
-     "offset": 139456,
      "shape": [
       64,
       3,
       3,
       64
-     ]
+     ],
+     "offset": 36352,
+     "dtype": "i8",
+     "scales_offset": 73216
     },
     {
-     "offset": 286912,
      "shape": [
       64
-     ]
+     ],
+     "offset": 73472,
+     "dtype": "f32"
     }
    ]
   },
@@ -181,17 +198,20 @@
    "relu": true,
    "tensors": [
     {
-     "offset": 287168,
      "shape": [
       128,
       1024
-     ]
+     ],
+     "offset": 73728,
+     "dtype": "i8",
+     "scales_offset": 204800
     },
     {
-     "offset": 811456,
      "shape": [
       128
-     ]
+     ],
+     "offset": 205312,
+     "dtype": "f32"
     }
    ]
   },
@@ -202,17 +222,20 @@
    "relu": false,
    "tensors": [
     {
-     "offset": 811968,
      "shape": [
       13,
       128
-     ]
+     ],
+     "offset": 205824,
+     "dtype": "i8",
+     "scales_offset": 207488
     },
     {
-     "offset": 818624,
      "shape": [
       13
-     ]
+     ],
+     "offset": 207540,
+     "dtype": "f32"
     }
    ]
   },
