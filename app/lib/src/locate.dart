@@ -102,13 +102,117 @@ double _interp(Float64List profile, double x) {
   return best;
 }
 
+/// numpy's default (linear) percentile, [q] in [0, 100].
+double _percentile(List<double> v, double q) {
+  final s = [...v]..sort();
+  final pos = q / 100 * (s.length - 1);
+  final i = pos.floor();
+  if (i >= s.length - 1) return s.last;
+  return s[i] + (s[i + 1] - s[i]) * (pos - i);
+}
+
+/// How grid-like [a, b] is: edge energy on its 7 inner lines against that halfway between lines.
+///
+/// Only positions inside the image count, so the board edges may lie outside it (a crop that cut into the
+/// edge squares). Weak lines against strong midpoints (25th vs 75th percentile): EVERY line of a true grid
+/// is an edge, while a wrong grid that only catches a frame or every other true line (a harmonic) has
+/// several quiet lines.
+double _innerLinesScore(Float64List profile, double a, double b) {
+  final c = (b - a) / 8;
+  final lines = <double>[], mids = <double>[];
+  for (var k = 0; k < 8; k++) {
+    final l = a + c * (k + 1), m = a + c * (k + 0.5);
+    if (k < 7 && l >= 0 && l <= profile.length - 1) {
+      lines.add(_interp(profile, l));
+    }
+    if (m >= 0 && m <= profile.length - 1) mids.add(_interp(profile, m));
+  }
+  if (lines.isEmpty || mids.isEmpty) return -1e9;
+  return _percentile(lines, 25) - _percentile(mids, 75);
+}
+
+/// Grid inside the coarse box [a, b] that may be inset from it (thick frame, frame around margins).
+(double, double) _snapInset(Float64List profile, double a, double b) {
+  final c0 = (b - a) / 8;
+  if (c0 < 3) return (a, b);
+  var bestScore = -1e9;
+  var best = (a, b);
+  for (var si = 0; si < 33; si++) {
+    final s = 0.75 * c0 + (1.07 * c0 - 0.75 * c0) * si / 32;
+    for (var x0 = a - 0.3 * c0; x0 <= a + 0.75 * c0 + 1e-6; x0 += 0.5) {
+      if (x0 + 8 * s > b + 0.3 * c0) continue;
+      final score = _innerLinesScore(profile, x0, x0 + 8 * s);
+      if (score > bestScore) {
+        bestScore = score;
+        best = (x0, x0 + 8 * s);
+      }
+    }
+  }
+  return best;
+}
+
+/// Grid for an image cropped ON or slightly INSIDE the board: 8 cells spanning about the whole axis.
+///
+/// The outer lines may fall just outside the image (a crop that cut into the edge squares), so the fit is
+/// scored on the 7 inner lines only; cutSquares clamps to the border for the missing sliver.
+(double, double) _snapTight(Float64List profile) {
+  final n = profile.length;
+  final c0 = n / 8;
+  var bestScore = -1.0;
+  var best = (0.0, n.toDouble());
+  for (var si = 0; si < 21; si++) {
+    final s = 0.9 * c0 + (1.1 * c0 - 0.9 * c0) * si / 20;
+    for (var x0 = -0.35 * c0; x0 <= 0.35 * c0 + 1e-6; x0 += 0.25) {
+      final end = x0 + 8 * s;
+      if (end < n - 0.35 * c0 || end > n + 0.35 * c0) continue;
+      final score = _innerLinesScore(profile, x0, end);
+      if (score > bestScore) {
+        bestScore = score;
+        best = (x0, end);
+      }
+    }
+  }
+  return best;
+}
+
 /// The board box inside one diagram image. Falls back to the whole image if nothing board-like is found.
+///
+/// Two hypotheses are compared on the grid-line energy of the whole image: the board found inside a plain
+/// page margin, and a board that fills the image (a crop made on, or slightly inside, the board's edge).
 Box findBoard(Rgb img, {bool snap = true}) {
   final gray = gaussianBlur(img.toGray(), 0.7);
   final w = gray.w, h = gray.h;
   final full = Box(0, 0, w.toDouble(), h.toDouble());
+  double px(int x, int y) => gray.at(reflect101(x, w), reflect101(y, h));
+  double sobelX(int x, int y) =>
+      ((px(x + 1, y - 1) + 2 * px(x + 1, y) + px(x + 1, y + 1)) -
+              (px(x - 1, y - 1) + 2 * px(x - 1, y) + px(x - 1, y + 1)))
+          .abs();
+  double sobelY(int x, int y) =>
+      ((px(x - 1, y + 1) + 2 * px(x, y + 1) + px(x + 1, y + 1)) -
+              (px(x - 1, y - 1) + 2 * px(x, y - 1) + px(x + 1, y - 1)))
+          .abs();
+
+  Float64List? fx, fy;
+  Box tight = full;
+  if (snap) {
+    final sx = Float64List(w), sy = Float64List(h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        sx[x] += sobelX(x, y);
+        sy[y] += sobelY(x, y);
+      }
+    }
+    fx = gaussianBlur1d(sx, 0.8);
+    fy = gaussianBlur1d(sy, 0.8);
+    final (tx0, tx1) = _snapTight(fx);
+    final (ty0, ty1) = _snapTight(fy);
+    tight = Box(tx0, ty0, tx1, ty1);
+  }
   final bg = _pageBackground(gray);
-  if (bg == null) return full; // edges are not a plain page: image is already cropped to the board
+  if (bg == null) {
+    return tight; // edges are not a plain page: image is already cropped to the board
+  }
   final thresh = math.max(9.0, 4 * bg.noise);
 
   var x0 = 0, x1 = w, y0 = 0, y1 = h;
@@ -140,7 +244,7 @@ Box findBoard(Rgb img, {bool snap = true}) {
       0.25 * row.reduce(math.max),
       math.max(2, h ~/ 50),
     );
-    if (x1 - x0 < 16 || y1 - y0 < 16) return full;
+    if (x1 - x0 < 16 || y1 - y0 < 16) return tight;
   }
   if (!snap) {
     return Box(x0.toDouble(), y0.toDouble(), x1.toDouble(), y1.toDouble());
@@ -148,33 +252,43 @@ Box findBoard(Rgb img, {bool snap = true}) {
 
   // |Sobel| edge energy summed over the board band, smoothed, then the best 9-line grid
   final gx = Float64List(w), gy = Float64List(h);
-  double px(int x, int y) => gray.at(reflect101(x, w), reflect101(y, h));
   for (var y = y0; y < y1; y++) {
     for (var x = 0; x < w; x++) {
-      gx[x] +=
-          ((px(x + 1, y - 1) + 2 * px(x + 1, y) + px(x + 1, y + 1)) -
-                  (px(x - 1, y - 1) + 2 * px(x - 1, y) + px(x - 1, y + 1)))
-              .abs();
+      gx[x] += sobelX(x, y);
     }
   }
   for (var y = 0; y < h; y++) {
     for (var x = x0; x < x1; x++) {
-      gy[y] +=
-          ((px(x - 1, y + 1) + 2 * px(x, y + 1) + px(x + 1, y + 1)) -
-                  (px(x - 1, y - 1) + 2 * px(x, y - 1) + px(x + 1, y - 1)))
-              .abs();
+      gy[y] += sobelY(x, y);
     }
   }
-  final (sx0, sx1) = _snapAxis(
-    gaussianBlur1d(gx, 0.8),
-    x0.toDouble(),
-    x1.toDouble(),
-  );
-  final (sy0, sy1) = _snapAxis(
-    gaussianBlur1d(gy, 0.8),
-    y0.toDouble(),
-    y1.toDouble(),
-  );
+  final px0 = gaussianBlur1d(gx, 0.8), py0 = gaussianBlur1d(gy, 0.8);
+  // candidates per axis: grid on the coarse box (thin frame or none), grid inset in it (thick frame, or a
+  // frame around margins/coordinates), grid filling the image (crop on the board's edge, whose white edge
+  // squares can pass for a page margin). The most grid-like one wins.
+  (double, double) best(List<(double, double)> cands, Float64List full) {
+    var pick = cands.first;
+    var bestScore = _innerLinesScore(full, pick.$1, pick.$2);
+    for (final c in cands.skip(1)) {
+      final score = _innerLinesScore(full, c.$1, c.$2);
+      if (score > bestScore) {
+        bestScore = score;
+        pick = c;
+      }
+    }
+    return pick;
+  }
+
+  final (sx0, sx1) = best([
+    _snapAxis(px0, x0.toDouble(), x1.toDouble()),
+    _snapInset(px0, x0.toDouble(), x1.toDouble()),
+    (tight.x0, tight.x1),
+  ], fx!);
+  final (sy0, sy1) = best([
+    _snapAxis(py0, y0.toDouble(), y1.toDouble()),
+    _snapInset(py0, y0.toDouble(), y1.toDouble()),
+    (tight.y0, tight.y1),
+  ], fy!);
   return Box(sx0, sy0, sx1, sy1);
 }
 
@@ -203,6 +317,78 @@ List<Box> findBoards(
     ];
   }
   return _findBoards(img, minFrac, inkDelta);
+}
+
+/// [a] lies within [b] (2 % tolerance).
+bool _inside(Box a, Box b) {
+  final t = 0.02 * b.width;
+  final same = a.x0 == b.x0 && a.y0 == b.y0 && a.x1 == b.x1 && a.y1 == b.y1;
+  return !same &&
+      a.x0 >= b.x0 - t &&
+      a.y0 >= b.y0 - t &&
+      a.x1 <= b.x1 + t &&
+      a.y1 <= b.y1 + t;
+}
+
+double _median(List<double> v) {
+  final s = [...v]..sort();
+  final n = s.length;
+  return n.isOdd ? s[n ~/ 2] : (s[n ~/ 2 - 1] + s[n ~/ 2]) / 2;
+}
+
+/// Do the 64 cells alternate light/dark like a chessboard?
+///
+/// Each cell is judged by the mean of a ring near its border (mostly square background, rarely the piece;
+/// a mean, not a median, so that fine hatching counts as grey); light cells (a8 parity) must be clearly
+/// brighter than dark cells, consistently across the board.
+bool _boardLike(Gray gray, Box box) {
+  final cw = box.width / 8, ch = box.height / 8;
+  final light = <double>[], dark = <double>[];
+  const t = [0.08, 0.25, 0.75, 0.92];
+  for (var r = 0; r < 8; r++) {
+    for (var f = 0; f < 8; f++) {
+      final cx = box.x0 + f * cw, cy = box.y0 + r * ch;
+      final a = [for (final v in t) (cy + v * ch).toInt()];
+      final b = [for (final v in t) (cx + v * cw).toInt()];
+      var sum = 0.0;
+      var n = 0;
+      void add(int ya, int yb, int xa, int xb) {
+        for (var y = math.max(0, ya); y < math.min(gray.h, yb); y++) {
+          for (var x = math.max(0, xa); x < math.min(gray.w, xb); x++) {
+            sum += gray.at(x, y);
+            n++;
+          }
+        }
+      }
+
+      add(a[0], a[1], b[0], b[3]); // top band
+      add(a[2], a[3], b[0], b[3]); // bottom band
+      add(a[1], a[2], b[0], b[1]); // left band
+      add(a[1], a[2], b[2], b[3]); // right band
+      ((r + f).isEven ? light : dark).add(n > 0 ? sum / n : 0);
+    }
+  }
+  final lm = _median(light), dm = _median(dark);
+  final mid = (lm + dm) / 2;
+  final consistent =
+      (light.where((m) => m > mid).length + dark.where((m) => m < mid).length) /
+      64;
+  return lm - dm >= 6 && consistent >= 0.7;
+}
+
+/// The framed [box] is an 8x8 board, or holds one (a frame may also enclose margins and coordinates).
+bool _isBoard(Rgb img, Gray gray, Box box) {
+  if (_boardLike(gray, box)) return true;
+  final pad = (0.04 * box.width).toInt();
+  final ox = math.max(0, box.x0.toInt() - pad),
+      oy = math.max(0, box.y0.toInt() - pad);
+  final crop = img.crop(ox, oy, box.x1.toInt() + pad, box.y1.toInt() + pad);
+  final inner = findBoard(crop);
+  if (math.min(inner.width, inner.height) <
+      0.5 * math.min(box.width, box.height)) {
+    return false;
+  }
+  return _boardLike(crop.toGray(), inner);
 }
 
 List<Box> _findBoards(Rgb img, double minFrac, double inkDelta) {
@@ -239,15 +425,19 @@ List<Box> _findBoards(Rgb img, double minFrac, double inkDelta) {
     if (c.x <= 1 || c.y <= 1 || c.x + c.w >= w - 1 || c.y + c.h >= h - 1) {
       continue; // cut by the screen edge
     }
-    found.add(
-      Box(
-        c.x.toDouble(),
-        c.y.toDouble(),
-        (c.x + c.w).toDouble(),
-        (c.y + c.h).toDouble(),
-      ),
+    final box = Box(
+      c.x.toDouble(),
+      c.y.toDouble(),
+      (c.x + c.w).toDouble(),
+      (c.y + c.h).toDouble(),
     );
+    // a hatched square or a block of text is not an 8x8 board
+    if (_isBoard(img, gray, box)) found.add(box);
   }
+  found = [
+    for (final b in found)
+      if (!found.any((o) => !identical(o, b) && _inside(b, o))) b,
+  ];
   // reading order: group by row (similar top edge), then left to right
   found.sort((a, b) => a.y0.compareTo(b.y0));
   final rows = <List<Box>>[];
