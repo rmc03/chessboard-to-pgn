@@ -25,6 +25,23 @@ const int whitePawn = 1, whiteKing = 6, blackPawn = 7, blackKing = 12;
 const String startFen =
     'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
+/// Spanish names of the classes (screen readers, tests).
+const List<String> pieceNames = [
+  'vacía',
+  'peón blanco',
+  'caballo blanco',
+  'alfil blanco',
+  'torre blanca',
+  'dama blanca',
+  'rey blanco',
+  'peón negro',
+  'caballo negro',
+  'alfil negro',
+  'torre negra',
+  'dama negra',
+  'rey negro',
+];
+
 bool isWhite(int cls) => cls >= 1 && cls <= 6;
 bool isBlack(int cls) => cls >= 7 && cls <= 12;
 

@@ -116,4 +116,8 @@ se instalen sobre las anteriores.** El flujo los usa solo si existen; `android/k
 ## Nombre, icono y versión
 
 Nombre visible «Chess to PGN». Los iconos (Android adaptativo y clásico, Windows `.ico`) salen de `python3 tool/make_icons.py`.
-La versión es la de `pubspec.yaml` (`0.2.0+2` → etiqueta `v0.2.0`); las novedades de cada versión van en `CHANGELOG.md`.
+La versión es la de `pubspec.yaml` (`0.2.1+3` → etiqueta `v0.2.1`); las novedades de cada versión van en `CHANGELOG.md`.
+
+Las piezas del tablero se dibujan con `assets/fonts/ChessFigures.ttf` (solo los 12 trebejos de DejaVu Sans, 5 kB; licencia en
+`assets/fonts/LICENSE-DejaVu.txt`, se regenera con `python3 tool/make_figures_font.py`), no con la fuente del sistema: Android
+dibuja el peón ♟ como emoji de color fijo y los peones blancos y negros se veían iguales.

@@ -2,6 +2,14 @@
 
 El flujo de release copia en las notas de cada versión la sección `## <versión>` de este archivo.
 
+## 0.2.1
+
+- **Peones blancos y negros se veían iguales en Android.** El tablero del resultado se dibujaba con la fuente del
+  sistema, y Android sustituye el peón (el único trebejo que también es un emoji) por un emoji de color fijo, así que
+  todos los peones salían oscuros aunque el FEN y el PGN fueran correctos. Ahora las piezas se dibujan con una fuente
+  incluida en la app: blancas con cuerpo blanco y contorno negro, negras macizas, igual en Android y en Windows.
+- El selector para corregir una casilla distingue ahora las piezas blancas de las negras (antes las mostraba iguales).
+
 ## 0.2.0
 
 - **Recortar a mano**: si un diagrama no se detecta o se lee mal, encierra el tablero con un rectángulo (esquinas

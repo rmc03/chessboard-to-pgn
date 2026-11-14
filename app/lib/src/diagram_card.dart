@@ -47,10 +47,9 @@ class _DiagramCardState extends State<DiagramCard> {
                 OutlinedButton(
                   key: ValueKey('pick-$cls'),
                   onPressed: () => Navigator.pop(context, cls),
-                  child: Text(
-                    cls == 0 ? 'vacía' : glyph(cls),
-                    style: TextStyle(fontSize: cls == 0 ? 14 : 28),
-                  ),
+                  child: cls == 0
+                      ? const Text('vacía', style: TextStyle(fontSize: 14))
+                      : PieceFigure(cls, size: 30),
                 ),
             ],
           ),

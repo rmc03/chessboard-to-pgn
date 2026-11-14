@@ -1,14 +1,67 @@
-// A very plain 8x8 board: Unicode figures, tappable squares, doubtful squares outlined in amber.
+// A very plain 8x8 board: chess figures from the bundled font, tappable squares, doubtful squares outlined in
+// amber.
 import 'package:material_ui/material_ui.dart';
 
 import 'chess.dart';
 
 const _light = Color(0xFFF0D9B5), _dark = Color(0xFFB58863);
 
-/// ︎ forces text (not emoji) presentation of the figures.
-String glyph(int cls) {
-  const solid = {1: '♟', 2: '♞', 3: '♝', 4: '♜', 5: '♛', 6: '♚'};
-  return '${solid[cls <= 6 ? cls : cls - 6]}︎';
+/// Bundled font with only the 12 chess figures (assets/fonts, see app/tool/make_figures_font.py).
+///
+/// The figures must NOT come from the system fonts: on Android the pawn U+265F (the only chess figure that is
+/// also an emoji) is replaced by a colour emoji that ignores the text colour, so white and black pawns looked
+/// the same while every other piece was fine.
+const figuresFont = 'ChessFigures';
+
+/// Filled figure of a piece class (U+265A king .. U+265F pawn), whatever its colour.
+String solidFigure(int cls) =>
+    String.fromCharCode(0x2660 - (cls <= 6 ? cls : cls - 6));
+
+/// Line-drawing figure of the same piece (U+2654 king .. U+2659 pawn).
+String outlineFigure(int cls) =>
+    String.fromCharCode(0x265A - (cls <= 6 ? cls : cls - 6));
+
+/// One piece in a [size] x [size] box (the figure itself is about 0.73 of it, centred).
+/// White: white body, black contour and inner lines. Black: solid black.
+class PieceFigure extends StatelessWidget {
+  const PieceFigure(this.cls, {super.key, required this.size});
+
+  final int cls;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget figure(String text, {Color? color, Paint? paint}) => Text(
+      text,
+      textScaler: TextScaler.noScaling,
+      style: TextStyle(
+        fontFamily: figuresFont,
+        fontSize: size,
+        height: 1,
+        color: color,
+        foreground: paint,
+      ),
+    );
+    final contour = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size * 0.05
+      ..strokeJoin = StrokeJoin.round
+      ..color = Colors.black;
+    return Semantics(
+      label: pieceNames[cls],
+      excludeSemantics: true,
+      child: isWhite(cls)
+          ? Stack(
+              alignment: Alignment.center,
+              children: [
+                figure(solidFigure(cls), paint: contour),
+                figure(solidFigure(cls), color: Colors.white),
+                figure(outlineFigure(cls), color: Colors.black),
+              ],
+            )
+          : figure(solidFigure(cls), color: Colors.black),
+    );
+  }
 }
 
 class BoardView extends StatelessWidget {
@@ -52,7 +105,6 @@ class BoardView extends StatelessWidget {
 
   Widget _square(int sq, bool light, double cell) {
     final cls = grid[sq];
-    final white = isWhite(cls);
     return GestureDetector(
       key: ValueKey('square-$sq'),
       onTap: () => onTap(sq),
@@ -64,24 +116,7 @@ class BoardView extends StatelessWidget {
               : null,
         ),
         alignment: Alignment.center,
-        child: cls == 0
-            ? null
-            : Text(
-                glyph(cls),
-                style: TextStyle(
-                  fontSize: cell * 0.78,
-                  height: 1,
-                  color: white ? Colors.white : Colors.black,
-                  shadows: white
-                      ? const [
-                          Shadow(offset: Offset(1, 0), color: Colors.black),
-                          Shadow(offset: Offset(-1, 0), color: Colors.black),
-                          Shadow(offset: Offset(0, 1), color: Colors.black),
-                          Shadow(offset: Offset(0, -1), color: Colors.black),
-                        ]
-                      : null,
-                ),
-              ),
+        child: cls == 0 ? null : PieceFigure(cls, size: cell * 0.92),
       ),
     );
   }
