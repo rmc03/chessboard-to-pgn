@@ -32,9 +32,35 @@ reglas del ajedrez (24/24 legales)**; no hay etiquetas de una persona independie
 - Los fallos por debajo de 0,85× vienen del **detector de tableros** (el marco fino se pierde, o el contador de página
   tapa una esquina), no del clasificador: recortando los tableros con su caja correcta, el modelo lee 8/8 incluso
   reducidos a 122 px. Si el detector falla, la app ofrece **Recortar a mano**.
-- **Coste en otro estilo:** en el primer diagrama de prueba (otro libro, 152×122 px) v2 acertaba las 64 casillas y v3
-  falla una (a4, dama blanca leída como negra, marcada como dudosa). Especializar en un libro desplaza las fronteras
-  de decisión para los demás, de ahí que se conserve v2 como modelo genérico.
+- **Otro estilo:** el primer diagrama de prueba (otro libro, 152×122 px) lo leen bien v2 y v3. El error que se atribuía a
+  v3 (a4, dama blanca leída como negra) era del **localizador**, que desplazaba la cuadrícula; con el localizador de la
+  versión 0.2.0, v3 lee las 64 casillas (confianza mínima 0,986).
+
+### Prueba de estrés de la versión 0.2.0 (modelo v3 + localizador nuevo)
+
+12 capturas del libro (las 7 anteriores y 5 nuevas a 0,6–1,38× de zoom), 43 tableros completos. Las 5 capturas nuevas
+(14 tableros, 10 diagramas que v3 **nunca vio**) salen 14/14, y un segundo lector independiente (otro modelo, sin ver
+las predicciones) etiquetó esos 14 tableros con el mismo resultado. Las capturas se reescalan y se recomprimen en JPEG (q85).
+
+| Prueba | 0,5× | 0,6× | 0,7× | 0,85× | 1,0× | 1,4× |
+|---|---|---|---|---|---|---|
+| Tableros encontrados en la página (todos los encontrados se leen bien) | 40/43 (antes 27) | 40/43 (antes 37) | 42/43 | 43/43 | 43/43 | 43/43 |
+| Lectura con la caja correcta del tablero | 43/43 | 43/43 | 43/43 | 43/43 | 43/43 | 43/43 |
+
+Recortes de un solo tablero (lo que da un recorte del usuario), a 1,0× y 0,7×:
+
+| Margen del recorte | 2 % hacia dentro | exacto | +3 % | +10 % | +25 % | 4 recortes aleatorios por tablero |
+|---|---|---|---|---|---|---|
+| Antes (1,0×) | 1/43 | 9/43 | 41/43 | 42/43 | 43/43 | 151/172 |
+| Ahora (1,0× y 0,7×) | 43/43 | 43/43 | 43/43 | 43/43 | 43/43 | 171/172 en cada escala |
+
+Antes, un recorte justo en el borde hacía que el detector tomara casillas rayadas sueltas por tableros y que la
+cuadrícula se desplazara hasta media casilla: piezas cortadas por la mitad y leídas mal, también de color. Los
+tableros que todavía no se encuentran a 0,5–0,7× tocan la barra de estado o el borde inferior de la pantalla.
+
+Se entrenó también un v4 con los 43 tableros: en 300 diagramas sintéticos nuevos empata con v3 (91,7 % de tableros
+exactos) y en el diagrama del otro libro baja su confianza a 0,889, así que la app sigue con v3.
+
 - Turno: el libro indica «Las blancas juegan primero»; la app puede usar blancas como valor por defecto pero el
   usuario debe poder cambiarlo. Los derechos de enroque propuestos son los *posibles* según rey/torres; en problemas
   suele ser más seguro `-`.
@@ -48,7 +74,7 @@ de diagramas reales y no hay que leerlas como tales.
 |---|---|
 | Acierto por casilla, validación (cajas con jitter) | 99,8 % |
 | 500 diagramas nuevos, tablero **exacto**, con la caja real | 93,8 % |
-| Igual, pero con el localizador automático en el circuito | 87,2 % (el localizador acierta ~95 %) |
+| Igual, pero con el localizador automático en el circuito | 87,2 % (el localizador acierta ~95 %); con el localizador de 0.2.0, 300 diagramas: v2 92,0 %, v3 91,7 % (localizador 97,3 %) |
 | Familia de pieza nunca vista (entrenado sin cburnett, evaluado solo con cburnett) | 98,8 % por casilla, 78,3 % de tableros exactos |
 | Diagrama real aportado por el autor (152×122 px, 1 imagen) | 64/64 casillas contra su lectura manual |
 
@@ -67,8 +93,8 @@ nuevos habrá errores: hay que ampliar los estilos de pieza (ver abajo) antes de
   v3 además con casillas recortadas de capturas de un libro con copyright. Las capturas, las casillas y las
   etiquetas **no** están en el repositorio (`prototype/data/` está en `.gitignore`), pero los pesos sí. Decidir la
   licencia del repositorio y de los pesos con eso en cuenta antes de publicar.
-- El detector de varios tableros exige un marco fino alrededor de cada diagrama y es fiable desde ~0,7× de una captura
-  de 1080 px de ancho; el resto se recorta a mano en la app. Descarta cajas de tamaño anómalo.
+- El detector de varios tableros exige un marco fino alrededor de cada diagrama y encuentra casi todos desde ~0,5× de una
+  captura de 1080 px de ancho; falla si el marco toca la barra de estado. El resto se recorta a mano en la app.
 - Solo orientación con blancas abajo.
 
 ## Qué se puede y qué no se puede deducir de una imagen
