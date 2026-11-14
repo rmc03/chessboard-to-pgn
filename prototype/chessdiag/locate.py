@@ -184,9 +184,12 @@ def find_boards(img: np.ndarray, min_frac: float = 0.12, ink_delta: float = 25.0
     scale = CANONICAL_WIDTH / img.shape[1] if img.shape[1] < 0.93 * CANONICAL_WIDTH else 1.0
     if scale != 1.0:  # zoomed-out screenshots: frame lines get thinner than the filters can see
         big = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        # enlarging also spreads and lightens a 1 px frame line: lower the contrast it needs in proportion
-        # (closing wider gaps as well would weld frames to nearby bars and text)
-        return [tuple(v / scale for v in b) for b in _find_boards(big, min_frac, ink_delta / scale)]
+        # enlarging also spreads and lightens a 1 px frame line: on a zoomed-out page (a tall phone screenshot)
+        # lower the contrast it needs in proportion. Not on a crop of one board: there it would weld the frame
+        # to a nearby status bar, and the board is big enough to be found as before.
+        if img.shape[0] >= 1.3 * img.shape[1]:
+            ink_delta /= scale
+        return [tuple(v / scale for v in b) for b in _find_boards(big, min_frac, ink_delta)]
     return _find_boards(img, min_frac, ink_delta)
 
 

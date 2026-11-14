@@ -311,14 +311,12 @@ List<Box> findBoards(
 }) {
   if (img.w < 0.93 * canonicalWidth && resize != null) {
     final scale = canonicalWidth / img.w;
-    // enlarging also spreads and lightens a 1 px frame line: lower the contrast it needs in proportion
-    // (closing wider gaps as well would weld frames to nearby bars and text)
+    // enlarging also spreads and lightens a 1 px frame line: on a zoomed-out page (a tall phone screenshot)
+    // lower the contrast it needs in proportion. Not on a crop of one board: there it would weld the frame
+    // to a nearby status bar, and the board is big enough to be found as before.
+    final delta = img.h >= 1.3 * img.w ? inkDelta / scale : inkDelta;
     return [
-      for (final b in _findBoards(
-        resize(img, scale),
-        minFrac,
-        inkDelta / scale,
-      ))
+      for (final b in _findBoards(resize(img, scale), minFrac, delta))
         Box(b.x0 / scale, b.y0 / scale, b.x1 / scale, b.y1 / scale),
     ];
   }
