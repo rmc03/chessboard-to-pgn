@@ -304,7 +304,7 @@ void main() {
     testWidgets(
       'Original fades the crop in over exactly the squares of the board',
       (tester) async {
-        await _home(tester, [board(middlegame, crop: true)]);
+        final home = await _home(tester, [board(middlegame, crop: true)]);
         expect(overlay(tester), 0);
         final blockHeight = tester.getSize(find.byType(DiagramBlock)).height;
 
@@ -334,15 +334,86 @@ void main() {
         expect(image.width, closeTo(layout.board, 0.5));
         expect(image.height, closeTo(layout.board, 0.5));
 
-        expect(
-          tester.getSize(find.byType(DiagramBlock)).height,
-          blockHeight,
-          reason: 'no jump when switching',
-        );
+        // the first use dismisses the hint line; switching itself moves nothing
+        final afterHint = tester.getSize(find.byType(DiagramBlock)).height;
+        expect(afterHint, lessThan(blockHeight));
         await tester.tap(find.text('Leído'));
         await tester.pumpAndSettle();
         expect(overlay(tester), 0);
-        expect(tester.getSize(find.byType(DiagramBlock)).height, blockHeight);
+        expect(tester.getSize(find.byType(DiagramBlock)).height, afterHint);
+        await tester.tap(find.text('Original'));
+        await tester.pumpAndSettle();
+        expect(tester.getSize(find.byType(DiagramBlock)).height, afterHint);
+      },
+    );
+
+    testWidgets(
+      'the hint "Mantén pulsado…" shows once per session, until Original is used',
+      (tester) async {
+        final home = await _home(tester, [
+          board(middlegame, crop: true),
+          board(endgame, crop: true),
+        ]);
+        const hint = 'Mantén pulsado el tablero para ver el original.';
+        expect(find.text(hint), findsNWidgets(2));
+        await tester.tap(find.text('Original').first);
+        await tester.pumpAndSettle();
+        expect(
+          find.text(hint),
+          findsNothing,
+          reason: 'dismissed for the session',
+        );
+        expect(home.session.diagrams, hasLength(2));
+      },
+    );
+
+    testWidgets('a long press dismisses the hint too', (tester) async {
+      await _home(tester, [board(middlegame, crop: true)]);
+      const hint = 'Mantén pulsado el tablero para ver el original.';
+      expect(find.text(hint), findsOneWidget);
+      final g = await tester.startGesture(tester.getCenter(square(27)));
+      await tester.pump(const Duration(milliseconds: 700));
+      await g.up();
+      await tester.pumpAndSettle();
+      expect(find.text(hint), findsNothing);
+    });
+
+    testWidgets('no hint without an original', (tester) async {
+      await _home(tester, [board(endgame)]);
+      expect(find.textContaining('Mantén pulsado'), findsNothing);
+    });
+
+    testWidgets(
+      'the Original shows the doubtful marks over the picture, by screen position',
+      (tester) async {
+        final home = await _home(tester, [
+          board(middlegame, crop: true, confidence: {18: 0.5, 21: 0.4}),
+        ]);
+        final marks = find.byKey(const ValueKey('original-doubts'));
+        expect(marks, findsOneWidget);
+        // inside the overlay, so it fades with the picture and sits on the squares
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('original-overlay')),
+            matching: marks,
+          ),
+          findsOneWidget,
+        );
+        final overlayRect = tester.getRect(
+          find.byKey(const ValueKey('original-overlay')),
+        );
+        expect(tester.getRect(marks), overlayRect);
+        // confirming a square updates the marks; the painter repaints only when the doubts change
+        CustomPainter painter() => tester.widget<CustomPaint>(marks).painter!;
+        final before = painter();
+        home.session.diagrams.single.confirmSquare(18);
+        await tester.pump();
+        expect(painter().shouldRepaint(before), isTrue);
+        // seen from Black the marks move with the squares
+        final d = home.session.diagrams.single;
+        d.rotate180();
+        await tester.pump();
+        expect(painter().shouldRepaint(before), isTrue);
       },
     );
 
@@ -455,7 +526,7 @@ void main() {
       'Android: the share icon opens a sheet with the three ways out',
       (tester) async {
         final home = await _home(tester, [board(middlegame), board(endgame)]);
-        expect(find.byTooltip('Copiar PGN'), findsNothing);
+        expect(inFirstBlock(find.byTooltip('Copiar PGN')), findsNothing);
         await tester.tap(find.byTooltip('Compartir o copiar PGN').first);
         await tester.pumpAndSettle();
         expect(find.text('Copiar PGN'), findsOneWidget);
@@ -536,7 +607,7 @@ void main() {
           'Quitar diagrama',
           'Copiar FEN',
         ]) {
-          final f = find.byTooltip(tip);
+          final f = inFirstBlock(find.byTooltip(tip));
           expect(f, findsOneWidget, reason: tip);
           final size = tester.getSize(f);
           expect(size.width, greaterThanOrEqualTo(48), reason: tip);
