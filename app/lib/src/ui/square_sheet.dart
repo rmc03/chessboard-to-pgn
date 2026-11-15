@@ -1,6 +1,6 @@
-// The square editor (docs/ux-spec.md, 4.2): a bottom sheet with the square's name and what was read, the
-// "Vacía" option, two rows of six pieces (white, black) and "Está bien" when the square is doubtful.
-// One tap applies and closes.
+// The square editor (docs/ux-spec.md, 4.2): a bottom sheet with the square's name, what was read next to the
+// square cut from the original ("Original" | "Leído"), two rows of six pieces (white, black), "Vacía" and
+// "Está bien" ("Está vacía" for a doubtful empty square). One tap applies and closes.
 //
 // In the "Revisar dudosas" flow ([review]) the same sheet stays open and moves on to the next doubtful square
 // after each answer ("Dudosa 2 de 3"), until none is left.
@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import '../chess.dart';
 import '../diagram.dart';
 import 'board.dart';
+import 'icons.dart';
 import 'theme.dart';
 import 'tokens.dart';
 
@@ -72,6 +73,12 @@ class _SquareSheetState extends State<SquareSheet> {
   late final int _total = widget.diagram.doubtfulCount;
   int _step = 1;
 
+  // The original crop is decoded once per diagram: this provider is equal to the one of the block's overlay, so
+  // both come from the same entry of the image cache.
+  late final MemoryImage? _original = widget.diagram.originalCrop == null
+      ? null
+      : MemoryImage(widget.diagram.originalCrop!);
+
   Diagram get _d => widget.diagram;
 
   /// Applies [done] to the square and either moves to the next doubtful one (review) or closes.
@@ -101,6 +108,8 @@ class _SquareSheetState extends State<SquareSheet> {
     final scheme = theme.colorScheme;
     final warning = context.app.warning;
     final current = _d.grid[_square];
+    final read = _d.readClass(_square);
+    final changed = _d.changedFromRead(_square);
     final doubtful = _d.isDoubtful(_square);
     final gutter = Space.gutter(MediaQuery.sizeOf(context).width);
 
@@ -117,21 +126,9 @@ class _SquareSheetState extends State<SquareSheet> {
                 Expanded(
                   child: Semantics(
                     header: true,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Casilla ${squareName(_square)}',
-                          style: text.titleLarge,
-                        ),
-                        const SizedBox(height: Space.xs),
-                        Text(
-                          'Se leyó: ${pieceNames[current]}',
-                          style: text.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Casilla ${squareName(_square)}',
+                      style: text.titleLarge,
                     ),
                   ),
                 ),
@@ -139,38 +136,59 @@ class _SquareSheetState extends State<SquareSheet> {
                   const SizedBox(width: Space.md),
                   Semantics(
                     liveRegion: true,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          size: 18,
-                          color: warning,
-                        ),
-                        const SizedBox(width: Space.xs),
-                        Text(
-                          'Dudosa $_step de $_total',
-                          style: text.labelLarge?.copyWith(color: warning),
-                        ),
-                      ],
-                    ),
+                    child: _flag('Dudosa $_step de $_total', text, warning),
                   ),
                 ] else if (doubtful) ...[
                   const SizedBox(width: Space.md),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                  _flag('Dudosa', text, warning),
+                ],
+              ],
+            ),
+            const SizedBox(height: Space.xs),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        size: 18,
-                        color: warning,
-                      ),
-                      const SizedBox(width: Space.xs),
                       Text(
-                        'Dudosa',
-                        style: text.labelLarge?.copyWith(color: warning),
+                        'Se leyó: ${pieceNames[read]}',
+                        style: text.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
+                      if (changed)
+                        TextButton(
+                          key: const ValueKey('restore-read'),
+                          onPressed: () =>
+                              _resolve(() => _d.restoreRead(_square)),
+                          child: const Text('Volver a lo leído'),
+                        ),
                     ],
+                  ),
+                ),
+                if (_original != null) ...[
+                  const SizedBox(width: Space.md),
+                  _CompareTile(
+                    caption: 'Original',
+                    semanticLabel: 'Original de la casilla',
+                    child: _OriginalSquare(
+                      key: const ValueKey('tile-original'),
+                      image: _original,
+                      index: _d.seenFromBlack ? flipSquare(_square) : _square,
+                      size: _compareTile,
+                    ),
+                  ),
+                  const SizedBox(width: Space.sm),
+                  _CompareTile(
+                    caption: 'Leído',
+                    semanticLabel: 'Leído: ${pieceNames[read]}',
+                    child: PieceTile(
+                      read,
+                      key: const ValueKey('tile-read'),
+                      size: _compareTile,
+                    ),
                   ),
                 ],
               ],
@@ -207,30 +225,135 @@ class _SquareSheetState extends State<SquareSheet> {
               },
             ),
             const SizedBox(height: Space.lg),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    key: const ValueKey('pick-0'),
-                    onPressed: () => _resolve(() => _d.setSquare(_square, 0)),
-                    icon: Icon(current == 0 ? Icons.check : Icons.crop_square),
-                    label: const Text('Vacía'),
-                  ),
-                ),
-                if (doubtful) ...[
-                  const SizedBox(width: Space.sm),
-                  Expanded(
-                    child: FilledButton(
-                      key: const ValueKey('confirm-square'),
-                      onPressed: () =>
-                          _resolve(() => _d.confirmSquare(_square)),
-                      child: const Text('Está bien'),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            _answers(current, doubtful),
           ],
+        ),
+      ),
+    );
+  }
+
+  static const double _compareTile = 56;
+
+  Widget _flag(String label, TextTheme text, Color warning) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      AppIcon(AppIcons.warning, size: 18, color: warning),
+      const SizedBox(width: Space.xs),
+      Text(label, style: text.labelLarge?.copyWith(color: warning)),
+    ],
+  );
+
+  /// The answers under the pieces:
+  ///  * a doubtful empty square: one filled "Está vacía";
+  ///  * a doubtful piece: "Vacía" and a filled "Está bien";
+  ///  * a trusted square: "Vacía" only.
+  Widget _answers(int current, bool doubtful) {
+    if (doubtful && current == 0) {
+      return FilledButton(
+        key: const ValueKey('confirm-square'),
+        onPressed: () => _resolve(() => _d.confirmSquare(_square)),
+        child: const Text('Está vacía'),
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            key: const ValueKey('pick-0'),
+            onPressed: () => _resolve(() => _d.setSquare(_square, 0)),
+            icon: current == 0 ? const AppIcon(AppIcons.check) : null,
+            label: const Text('Vacía'),
+          ),
+        ),
+        if (doubtful) ...[
+          const SizedBox(width: Space.sm),
+          Expanded(
+            child: FilledButton(
+              key: const ValueKey('confirm-square'),
+              onPressed: () => _resolve(() => _d.confirmSquare(_square)),
+              child: const Text('Está bien'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// A 56 dp tile with its caption underneath ("Original" | "Leído").
+class _CompareTile extends StatelessWidget {
+  const _CompareTile({
+    required this.caption,
+    required this.semanticLabel,
+    required this.child,
+  });
+
+  final String caption, semanticLabel;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      container: true,
+      label: semanticLabel,
+      image: true,
+      excludeSemantics: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          child,
+          const SizedBox(height: Space.xs),
+          Text(
+            caption,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One square of the original picture: the crop is drawn at 8 x [size] and shifted so that the square at screen
+/// position [index] (0..63, row-major from the top-left, the way the picture is oriented) fills the tile.
+class _OriginalSquare extends StatelessWidget {
+  const _OriginalSquare({
+    super.key,
+    required this.image,
+    required this.index,
+    required this.size,
+  });
+
+  final ImageProvider image;
+  final int index;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final row = index ~/ 8, col = index % 8;
+    return Container(
+      width: size,
+      height: size,
+      foregroundDecoration: BoxDecoration(
+        border: Border.all(color: scheme.outline),
+      ),
+      child: ClipRect(
+        child: OverflowBox(
+          alignment: Alignment(-1 + 2 * col / 7, -1 + 2 * row / 7),
+          minWidth: size * 8,
+          maxWidth: size * 8,
+          minHeight: size * 8,
+          maxHeight: size * 8,
+          child: Image(
+            image: image,
+            fit: BoxFit.fill,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.medium,
+            excludeFromSemantics: true,
+          ),
         ),
       ),
     );
@@ -265,12 +388,7 @@ class _PieceRow extends StatelessWidget {
           child: InkWell(
             key: ValueKey('pick-$cls'),
             onTap: () => onPick(cls),
-            child: PieceTile(
-              cls,
-              size: size,
-              selected: cls == current,
-              dark: i.isOdd,
-            ),
+            child: PieceTile(cls, size: size, selected: cls == current),
           ),
         ),
       ],

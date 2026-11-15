@@ -303,4 +303,107 @@ void main() {
       expect(d.pgn(3), contains('[FEN "$sample w - - 0 1"]'));
     });
   });
+
+  group('fix round: coloured check problem, read class, warnings', () {
+    // Both kings in check: the side that does not move is in check whoever moves.
+    const bothInCheck = 'r6k/8/8/8/8/8/8/K6R';
+
+    test('the check problem names the colour that does not move', () {
+      const p = 'el bando que no mueve está en jaque';
+      expect(
+        describeProblem(p, turn: 'w'),
+        'Las negras están en jaque y no les toca mover.',
+      );
+      expect(
+        describeProblem(p, turn: 'b'),
+        'Las blancas están en jaque y no les toca mover.',
+      );
+      expect(describeProblem(p), 'El bando que no mueve está en jaque.');
+
+      final d = Diagram.fromPlacement(bothInCheck);
+      expect(d.forcedTurn, isNull);
+      expect(d.status.problems, [
+        'Las negras están en jaque y no les toca mover.',
+      ]);
+      d.turn = 'b';
+      expect(d.status.problems, [
+        'Las blancas están en jaque y no les toca mover.',
+      ]);
+    });
+
+    test(
+      '"Cambiar turno" is offered only when switching really fixes the check',
+      () {
+        // both in check: switching just moves the problem to the other colour
+        expect(
+          Diagram.fromPlacement(bothInCheck).switchingTurnFixesCheck,
+          isFalse,
+        );
+        // one king in check: the turn is forced and there is nothing to fix
+        final forced = Diagram.fromPlacement(
+          'r3k2r/ppp2ppp/5n2/1B2p3/4P3/2N2N2/PPPP1PPP/R1BQK2R',
+        );
+        expect(forced.turnIsForced, isTrue);
+        expect(forced.switchingTurnFixesCheck, isFalse);
+        // no check problem at all
+        expect(Diagram.fromPlacement(sample).switchingTurnFixesCheck, isFalse);
+      },
+    );
+
+    test(
+      'readClass keeps what the reader recognised; restoreRead puts it back',
+      () {
+        final d = Diagram.fromPlacement(sample);
+        final e4 = sq('e4'); // a black knight
+        expect(d.readClass(e4), 8);
+        expect(d.changedFromRead(e4), isFalse);
+        d.setSquare(e4, 0);
+        expect(d.readClass(e4), 8);
+        expect(d.changedFromRead(e4), isTrue);
+        var notified = 0;
+        d.addListener(() => notified++);
+        d.restoreRead(e4);
+        expect(d.grid[e4], 8);
+        expect(d.changedFromRead(e4), isFalse);
+        expect(d.confidence[e4], 1);
+        expect(notified, 1);
+      },
+    );
+
+    test('restoreRead restores a doubtful read class as trusted and survives rotate180', () {
+      final conf = List<double>.filled(64, 1)..[sq('b6')] = 0.4;
+      final d = Diagram(
+        grid: placementToGrid(sample),
+        confidence: conf,
+        turn: 'w',
+      );
+      final b6 = sq('b6'); // black queen
+      expect(d.isDoubtful(b6), isTrue);
+      d.setSquare(b6, 3);
+      d.rotate180();
+      // the square is the same board square, now at the mirrored index
+      expect(d.readClass(63 - b6), 11);
+      expect(d.changedFromRead(63 - b6), isTrue);
+      d.restoreRead(63 - b6);
+      expect(d.grid[63 - b6], 11);
+      expect(d.isDoubtful(63 - b6), isFalse);
+      d.rotate180();
+      expect(d.grid[b6], 11);
+      expect(d.changedFromRead(b6), isFalse);
+    });
+
+    test('hasWarnings: doubts or an impossible position', () {
+      expect(Diagram.fromPlacement(sample).hasWarnings, isFalse);
+      expect(Diagram.fromPlacement('8/8/8/8/8/8/8/4K3').hasWarnings, isTrue);
+      final conf = List<double>.filled(64, 1)..[0] = 0.5;
+      expect(
+        Diagram(
+          grid: placementToGrid(sample),
+          confidence: conf,
+          turn: 'w',
+        ).hasWarnings,
+        isTrue,
+      );
+    });
+  });
 }

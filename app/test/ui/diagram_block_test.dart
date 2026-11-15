@@ -6,16 +6,31 @@ import 'package:chessboard_pgn/src/locate.dart';
 import 'package:chessboard_pgn/src/session.dart';
 import 'package:chessboard_pgn/src/ui/board.dart';
 import 'package:chessboard_pgn/src/ui/diagram_block.dart';
+import 'package:chessboard_pgn/src/ui/icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'home_harness.dart';
 
-Finder get _blockMenu => find.descendant(
-  of: find.byType(DiagramBlock).first,
-  matching: find.byTooltip('Más opciones'),
-);
+Finder inFirstBlock(Finder f) =>
+    find.descendant(of: find.byType(DiagramBlock).first, matching: f);
+
+/// Walks the Tab order until the focus is on the icon button with [tooltip], then presses Enter on it.
+Future<void> pressByKeyboard(WidgetTester tester, String tooltip) async {
+  for (var i = 0; i < 120; i++) {
+    final focused = FocusManager.instance.primaryFocus?.context;
+    final button = focused?.findAncestorWidgetOfExactType<IconButton>();
+    if (button?.tooltip == tooltip) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      return;
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+  }
+  fail('the Tab order never reached "$tooltip"');
+}
 
 Future<Home> _home(
   WidgetTester tester,
@@ -155,7 +170,10 @@ void main() {
         expect(find.text('Casilla a3'), findsOneWidget);
         expect(find.text('Dudosa 3 de 3'), findsOneWidget);
 
-        await tester.tap(find.text('Está bien'));
+        // a3 is empty: the only answer offered is a single "Está vacía"
+        expect(find.byKey(const ValueKey('pick-0')), findsNothing);
+        expect(find.text('Está bien'), findsNothing);
+        await tester.tap(find.text('Está vacía'));
         await tester.pumpAndSettle();
         expect(find.byType(BottomSheet), findsNothing);
         expect(d.doubtfulCount, 0);
@@ -304,14 +322,15 @@ void main() {
         // the picture covers the board's 8x8 squares (not the coordinate gutter), square for square
         final boardBox = tester.getRect(find.byType(BoardView).first);
         final layout = BoardLayout(boardBox.width, coordinates: true);
+        final squares = layout.boardRect;
         final image = tester.getRect(
           find.descendant(
             of: find.byKey(const ValueKey('original-overlay')),
             matching: find.byType(Image),
           ),
         );
-        expect(image.left, closeTo(boardBox.left + layout.gutter, 0.5));
-        expect(image.top, closeTo(boardBox.top, 0.5));
+        expect(image.left, closeTo(boardBox.left + squares.left, 0.5));
+        expect(image.top, closeTo(boardBox.top + squares.top, 0.5));
         expect(image.width, closeTo(layout.board, 0.5));
         expect(image.height, closeTo(layout.board, 0.5));
 
@@ -384,10 +403,11 @@ void main() {
           tester.widget<BoardView>(find.byType(BoardView).first).blackAtBottom,
           isFalse,
         );
+        IconButton flip() =>
+            tester.widget<IconButton>(find.byKey(const ValueKey('flip')));
+        expect(flip().isSelected, isFalse);
 
-        await tester.tap(_blockMenu);
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Ver desde las negras'));
+        await tester.tap(find.byTooltip('Ver desde las negras'));
         await tester.pumpAndSettle();
         expect(d.seenFromBlack, isTrue);
         expect(d.grid, grid.reversed.toList());
@@ -395,74 +415,88 @@ void main() {
           tester.widget<BoardView>(find.byType(BoardView).first).blackAtBottom,
           isTrue,
         );
+        expect(flip().isSelected, isTrue);
 
-        await tester.tap(_blockMenu);
-        await tester.pumpAndSettle();
-        expect(find.text('Ver desde las blancas'), findsOneWidget);
-        await tester.tap(find.text('Ver desde las blancas'));
+        await tester.tap(find.byTooltip('Ver desde las blancas'));
         await tester.pumpAndSettle();
         expect(d.fen, before);
         expect(
           tester.widget<BoardView>(find.byType(BoardView).first).blackAtBottom,
           isFalse,
         );
+        expect(flip().isSelected, isFalse);
       },
     );
+
+    testWidgets('the toggle works from the keyboard', (tester) async {
+      final home = await _home(tester, [board(middlegame)]);
+      await pressByKeyboard(tester, 'Ver desde las negras');
+      expect(home.session.diagrams.single.seenFromBlack, isTrue);
+    });
   });
 
-  group('block menu', () {
-    testWidgets('Copiar PGN copies this diagram with its number', (
+  group('actions of the block (no overflow menu)', () {
+    testWidgets('Copiar PGN copies this diagram with its number (Windows)', (
       tester,
     ) async {
-      final home = await _home(tester, [board(middlegame), board(endgame)]);
-      await tester.tap(_blockMenu);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Copiar PGN'));
+      final home = await _home(tester, [
+        board(middlegame),
+        board(endgame),
+      ], canShare: false);
+      expect(find.byTooltip('Compartir o copiar PGN'), findsNothing);
+      await tester.tap(find.byTooltip('Copiar PGN').first);
       await tester.pumpAndSettle();
       expect(home.clipboard, home.session.pgnOf(home.session.diagrams.first));
       expect(home.clipboard, contains('[Event "Diagrama 1"]'));
       expect(find.text('PGN copiado'), findsOneWidget);
     });
 
-    testWidgets('"Compartir este diagrama" only where sharing exists', (
-      tester,
-    ) async {
-      await _home(tester, [board(middlegame)], canShare: false);
-      await tester.tap(_blockMenu);
-      await tester.pumpAndSettle();
-      expect(find.text('Compartir este diagrama'), findsNothing);
-      expect(find.text('Copiar PGN'), findsOneWidget);
-    });
+    testWidgets(
+      'Android: the share icon opens a sheet with the three ways out',
+      (tester) async {
+        final home = await _home(tester, [board(middlegame), board(endgame)]);
+        expect(find.byTooltip('Copiar PGN'), findsNothing);
+        await tester.tap(find.byTooltip('Compartir o copiar PGN').first);
+        await tester.pumpAndSettle();
+        expect(find.text('Copiar PGN'), findsOneWidget);
+        expect(find.text('Compartir como texto'), findsOneWidget);
+        expect(find.text('Compartir como archivo .pgn'), findsOneWidget);
+        await tester.tap(find.text('Compartir como texto'));
+        await tester.pumpAndSettle();
+        expect(
+          home.sharedText.single,
+          home.session.pgnOf(home.session.diagrams.first),
+        );
+        expect(home.sharedText.single, isNot(home.session.allPgn));
 
-    testWidgets('"Compartir este diagrama" shares only that diagram', (
-      tester,
-    ) async {
-      final home = await _home(tester, [board(middlegame), board(endgame)]);
-      await tester.tap(_blockMenu);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Compartir este diagrama'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Como texto'));
-      await tester.pumpAndSettle();
-      expect(
-        home.sharedText.single,
-        home.session.pgnOf(home.session.diagrams.first),
-      );
-      expect(home.sharedText.single, isNot(home.session.allPgn));
-    });
+        await tester.tap(find.byTooltip('Compartir o copiar PGN').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Compartir como archivo .pgn'));
+        await tester.pumpAndSettle();
+        expect(
+          String.fromCharCodes(home.sharedFiles.single.$2),
+          home.session.pgnOf(home.session.diagrams.first),
+        );
+
+        await tester.tap(find.byTooltip('Compartir o copiar PGN').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Copiar PGN'));
+        await tester.pumpAndSettle();
+        expect(home.clipboard, home.session.pgnOf(home.session.diagrams.first));
+        expect(find.text('PGN copiado'), findsOneWidget);
+      },
+    );
 
     testWidgets(
-      'Eliminar removes the block and Deshacer brings it back where it was, edits intact',
+      '"Quitar diagrama" removes the block and Deshacer brings it back where it was, edits intact',
       (tester) async {
         final home = await _home(tester, [board(middlegame), board(endgame)]);
         final first = home.session.diagrams.first..turn = 'b';
-        await tester.tap(_blockMenu);
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Eliminar'));
+        await tester.tap(find.byTooltip('Quitar diagrama').first);
         await tester.pumpAndSettle();
         expect(home.session.diagramCount, 1);
         expect(find.byType(DiagramBlock), findsOneWidget);
-        expect(find.text('Diagrama 1 eliminado'), findsOneWidget);
+        expect(find.text('Diagrama 1 quitado'), findsOneWidget);
         expect(find.text('Deshacer'), findsOneWidget);
         expect(find.text('Captura 1 · 1 diagrama'), findsOneWidget);
 
@@ -474,23 +508,69 @@ void main() {
       },
     );
 
-    testWidgets('Ajustar recorte asks for a region and replaces this diagram', (
-      tester,
-    ) async {
-      final session = Session(
-        readImage: readerOf((_) => [board(middlegame)]),
-        readRegion: (bytes, region) async => board(endgame),
-      );
-      final home = Home(session)..cropResult = const Box(1, 2, 3, 4);
-      await home.pump(tester);
-      await home.addCapture(tester);
-      await tester.tap(_blockMenu);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Ajustar recorte'));
-      await tester.pumpAndSettle();
-      expect(home.crops, 1);
-      expect(session.diagrams.single.placement, endgame);
-    });
+    testWidgets(
+      '"Ajustar recorte" asks for a region and replaces this diagram',
+      (tester) async {
+        final session = Session(
+          readImage: readerOf((_) => [board(middlegame)]),
+          readRegion: (bytes, region) async => board(endgame),
+        );
+        final home = Home(session)..cropResult = const Box(1, 2, 3, 4);
+        await home.pump(tester);
+        await home.addCapture(tester);
+        await tester.tap(find.byTooltip('Ajustar recorte'));
+        await tester.pumpAndSettle();
+        expect(home.crops, 1);
+        expect(session.diagrams.single.placement, endgame);
+      },
+    );
+
+    testWidgets(
+      'every moved action has a tooltip, is 48 dp and works from the keyboard',
+      (tester) async {
+        final home = await _home(tester, [board(middlegame, crop: true)]);
+        for (final tip in [
+          'Ajustar recorte',
+          'Ver desde las negras',
+          'Compartir o copiar PGN',
+          'Quitar diagrama',
+          'Copiar FEN',
+        ]) {
+          final f = find.byTooltip(tip);
+          expect(f, findsOneWidget, reason: tip);
+          final size = tester.getSize(f);
+          expect(size.width, greaterThanOrEqualTo(48), reason: tip);
+          expect(size.height, greaterThanOrEqualTo(48), reason: tip);
+        }
+        await pressByKeyboard(tester, 'Copiar FEN');
+        await tester.pumpAndSettle();
+        expect(home.clipboard, home.session.diagrams.single.fen);
+        await pressByKeyboard(tester, 'Quitar diagrama');
+        await tester.pumpAndSettle();
+        expect(home.session.diagramCount, 0);
+      },
+    );
+
+    testWidgets(
+      'the comparator row keeps the icons beside the segmented control at 360 dp and 1.3x text',
+      (tester) async {
+        final home = Home(
+          sessionWith({
+            1: () => [board(middlegame, crop: true)],
+          }),
+        );
+        await home.pump(tester, size: const Size(360, 2400), textScale: 1.3);
+        await home.addCapture(tester);
+        final segmented = tester.getRect(find.byType(SegmentedButton<bool>));
+        final crop = tester.getRect(find.byTooltip('Ajustar recorte'));
+        final flip = tester.getRect(find.byTooltip('Ver desde las negras'));
+        expect(crop.center.dy, closeTo(segmented.center.dy, 8));
+        expect(flip.center.dy, closeTo(segmented.center.dy, 8));
+        expect(segmented.right, lessThanOrEqualTo(crop.left + 0.5));
+        expect(crop.right, lessThanOrEqualTo(flip.left + 0.5));
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('Lichess and copying', () {
@@ -522,10 +602,13 @@ void main() {
       },
     );
 
-    testWidgets('Copiar FEN and the FEN line copy the FEN', (tester) async {
+    testWidgets('the FEN line and its 48 dp copy button copy the FEN', (
+      tester,
+    ) async {
       final home = await _home(tester, [board(middlegame)]);
       final d = home.session.diagrams.single;
-      await tester.tap(find.text('Copiar FEN'));
+      expect(find.text('Copiar FEN'), findsNothing, reason: 'no text button');
+      await tester.tap(find.byTooltip('Copiar FEN'));
       await tester.pumpAndSettle();
       expect(home.clipboard, d.fen);
       expect(find.text('FEN copiado'), findsOneWidget);
@@ -576,24 +659,47 @@ void main() {
         board(endgame, confidence: {10: 0.5, 11: 0.5}),
       ]);
       expect(find.text('2 casillas dudosas'), findsOneWidget);
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('review-doubtful')),
+          matching: find.byType(AppIcon),
+        ),
+        findsNWidgets(2),
+        reason: 'warning and chevron',
+      );
       expect(find.text('Revisar dudosas'), findsOneWidget);
     });
 
     testWidgets(
-      'an impossible position says so with an error icon and the reason, and the review stays in the menu',
+      'an impossible position AND doubtful squares show both: the reason and the review row',
       (tester) async {
-        await _home(tester, [
+        final home = await _home(tester, [
           board('8/8/8/8/8/8/8/4K3', confidence: {10: 0.5}),
         ]);
         expect(find.text('Posición imposible'), findsOneWidget);
         expect(find.text('Falta el rey negro.'), findsOneWidget);
-        expect(find.byIcon(Icons.error_outline), findsOneWidget);
-        await tester.tap(_blockMenu);
+        expect(find.text('1 casilla dudosa'), findsOneWidget);
+        expect(find.byKey(const ValueKey('review-doubtful')), findsOneWidget);
+        expect(find.byTooltip('Más opciones'), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('review-doubtful')));
         await tester.pumpAndSettle();
-        expect(find.text('Revisar dudosas'), findsOneWidget);
+        expect(find.text('Dudosa 1 de 1'), findsOneWidget);
+        await tester.tap(find.text('Está vacía'));
+        await tester.pumpAndSettle();
+        expect(home.session.diagrams.single.doubtfulCount, 0);
+        expect(find.text('Posición imposible'), findsOneWidget);
       },
     );
+
+    testWidgets('the check problem names the colour', (tester) async {
+      await _home(tester, [board('r6k/8/8/8/8/8/8/K6R')]);
+      expect(
+        find.text('Las negras están en jaque y no les toca mover.'),
+        findsOneWidget,
+      );
+      // switching the side to move would only move the problem to the other colour: no shortcut offered
+      expect(find.text('Cambiar turno'), findsNothing);
+    });
 
     testWidgets('the block is one surface: no Card inside', (tester) async {
       await _home(tester, [board(middlegame)]);

@@ -1,4 +1,4 @@
-// Ajustes (docs/ux-spec.md, 4.4): theme, ink, board style, coordinates, piece set and "Acerca de".
+// Ajustes (docs/ux-spec.md, 4.4): theme, stone, board style, coordinates, piece set and "Acerca de".
 //
 // A live preview board is fixed at the top (compact width) or in its own column (>= 840 dp wide, where the
 // controls sit to its right in a constrained column, not a stretched phone). Every change goes straight to
@@ -9,7 +9,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../settings.dart';
 import 'board.dart';
-import 'color_math.dart';
+import 'icons.dart';
 import 'pieces.dart';
 import 'scope.dart';
 import 'theme.dart';
@@ -122,11 +122,11 @@ class _WideLayout extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final settings = scope.settings;
-    final ink = inkById(settings.inkId);
+    final stone = stoneById(settings.stoneId);
     final set = scope.catalog.resolve(settings.pieceSetId);
     final summary = [
-      ink.name,
-      settings.boardStyle == BoardStyle.printed ? 'Impreso' : 'Liso',
+      stone.name,
+      _styleNames[settings.boardStyle]!,
       set.name,
     ].join(' · ');
     return Center(
@@ -185,7 +185,7 @@ class _WideLayout extends StatelessWidget {
   }
 }
 
-/// The live preview: a real position in the current ink, style, piece set and coordinates.
+/// The live preview: a real position in the current stone, style, piece set and coordinates.
 class _Preview extends StatelessWidget {
   const _Preview({required this.settings, required this.side});
 
@@ -225,7 +225,7 @@ class _Controls extends StatelessWidget {
         const _Label('Tema'),
         SegmentedButton<ThemeMode>(
           expandedInsets: EdgeInsets.zero,
-          showSelectedIcon: true,
+          showSelectedIcon: false,
           segments: const [
             ButtonSegment(value: ThemeMode.system, label: Text('Sistema')),
             ButtonSegment(value: ThemeMode.light, label: Text('Claro')),
@@ -235,16 +235,18 @@ class _Controls extends StatelessWidget {
           onSelectionChanged: (s) => unawaited(settings.setThemeMode(s.first)),
         ),
         const SizedBox(height: Space.lg),
-        const _Label('Tinta'),
-        _InkPicker(
-          selectedId: settings.inkId,
-          onSelected: (id) => unawaited(settings.setInkId(id)),
+        const _Label('Piedra'),
+        _StonePicker(
+          selectedId: settings.stoneId,
+          onSelected: (id) => unawaited(settings.setStoneId(id)),
         ),
         const _Section('Tablero'),
         const _Label('Estilo'),
         SegmentedButton<BoardStyle>(
           expandedInsets: EdgeInsets.zero,
+          showSelectedIcon: false,
           segments: const [
+            ButtonSegment(value: BoardStyle.stone, label: Text('Piedra')),
             ButtonSegment(value: BoardStyle.flat, label: Text('Liso')),
             ButtonSegment(value: BoardStyle.printed, label: Text('Impreso')),
           ],
@@ -270,7 +272,7 @@ class _Controls extends StatelessWidget {
         const _Section('Acerca de'),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.info_outline),
+          leading: const AppIcon(AppIcons.info),
           title: const Text('Versión'),
           trailing: Text(
             appVersion,
@@ -282,16 +284,16 @@ class _Controls extends StatelessWidget {
         ),
         const ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(Icons.lock_outline),
+          leading: AppIcon(AppIcons.privacy),
           title: Text('Todo se procesa en el dispositivo.'),
           subtitle: Text('Las capturas no salen del móvil ni del ordenador.'),
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.description_outlined),
+          leading: const AppIcon(AppIcons.licenses),
           title: const Text('Licencias'),
           subtitle: const Text('Piezas, fuentes y paquetes'),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: const AppIcon(AppIcons.go),
           onTap: () => showLicensePage(
             context: context,
             applicationName: 'Chess to PGN',
@@ -319,11 +321,18 @@ class _Section extends StatelessWidget {
           top: Space.xl + Space.sm,
           bottom: Space.md,
         ),
-        child: Text(
-          title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: theme.colorScheme.primary,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: Space.sm),
+            const Divider(),
+          ],
         ),
       ),
     );
@@ -351,10 +360,16 @@ class _Label extends StatelessWidget {
   }
 }
 
-// ----------------------------------------------------------------------------------------------- inks
+// ---------------------------------------------------------------------------------------------- stones
 
-class _InkPicker extends StatelessWidget {
-  const _InkPicker({required this.selectedId, required this.onSelected});
+const Map<BoardStyle, String> _styleNames = {
+  BoardStyle.stone: 'Piedra',
+  BoardStyle.flat: 'Liso',
+  BoardStyle.printed: 'Impreso',
+};
+
+class _StonePicker extends StatelessWidget {
+  const _StonePicker({required this.selectedId, required this.onSelected});
 
   final String selectedId;
   final ValueChanged<String> onSelected;
@@ -363,17 +378,17 @@ class _InkPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 540 ? 6 : 3;
+        final columns = constraints.maxWidth >= 440 ? 5 : 3;
         final cell = constraints.maxWidth / columns;
         return Wrap(
           children: [
-            for (final ink in inks)
+            for (final stone in stones)
               SizedBox(
                 width: cell,
-                child: _InkSwatch(
-                  ink: ink,
-                  selected: ink.id == selectedId,
-                  onTap: () => onSelected(ink.id),
+                child: _StoneSwatch(
+                  stone: stone,
+                  selected: stone.id == selectedId,
+                  onTap: () => onSelected(stone.id),
                 ),
               ),
           ],
@@ -383,15 +398,16 @@ class _InkPicker extends StatelessWidget {
   }
 }
 
-/// A round sample of an ink with its name; the chosen one has a check and a ring (never colour alone).
-class _InkSwatch extends StatelessWidget {
-  const _InkSwatch({
-    required this.ink,
+/// A piece of the board in a stone (2 x 2 squares with the speckle) and its name. The chosen one has a green
+/// ring, a check and a bold name (never colour alone).
+class _StoneSwatch extends StatelessWidget {
+  const _StoneSwatch({
+    required this.stone,
     required this.selected,
     required this.onTap,
   });
 
-  final SpotInk ink;
+  final Stone stone;
   final bool selected;
   final VoidCallback onTap;
 
@@ -399,22 +415,16 @@ class _InkSwatch extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    // What gets printed: the ink's `primary` in the current brightness (masthead, numerals), not the raw seed.
-    final printed = inkPrimary(ink, theme.brightness);
-    final onSeed =
-        contrastRatio(printed, BoardMarks.pieceWhite) >=
-            contrastRatio(printed, BoardMarks.pieceBlack)
-        ? BoardMarks.pieceWhite
-        : BoardMarks.pieceBlack;
+    const ring = 3.0, gap = 3.0, sample = 52.0;
     return Semantics(
       button: true,
       selected: selected,
       inMutuallyExclusiveGroup: true,
-      label: ink.name,
+      label: stone.name,
       excludeSemantics: true,
       onTap: onTap,
       child: InkWell(
-        borderRadius: BorderRadius.circular(Corner.container),
+        borderRadius: BorderRadius.circular(Corner.control),
         onTap: onTap,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: minTarget),
@@ -426,32 +436,44 @@ class _InkSwatch extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedContainer(
-                  duration: Motion.of(context, Motion.fast),
-                  width: 52,
-                  height: 52,
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selected ? scheme.onSurface : Colors.transparent,
-                      width: 2,
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedContainer(
+                      duration: Motion.of(context, Motion.fast),
+                      padding: const EdgeInsets.all(gap),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: selected ? scheme.primary : Colors.transparent,
+                          width: ring,
+                        ),
+                      ),
+                      child: StoneSample(stone: stone, size: sample),
                     ),
-                  ),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: printed,
-                      border: Border.all(color: scheme.outline, width: 1),
-                    ),
-                    child: selected
-                        ? Icon(Icons.check, color: onSeed, size: 22)
-                        : null,
-                  ),
+                    if (selected)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: IconTheme(
+                              data: IconThemeData(color: scheme.onPrimary),
+                              child: const AppIcon(AppIcons.check, size: 16),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: Space.xs),
                 Text(
-                  ink.name,
+                  stone.name,
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -545,7 +567,7 @@ class _PieceSetTile extends StatelessWidget {
             ? scheme.secondaryContainer
             : scheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Corner.container),
+          borderRadius: BorderRadius.circular(Corner.control),
           side: selected
               ? BorderSide(color: scheme.primary, width: 2)
               : BorderSide(color: scheme.outlineVariant),
@@ -564,7 +586,11 @@ class _PieceSetTile extends StatelessWidget {
                     SetPreview(setId: set.id, size: 88, style: boardStyle),
                     const Spacer(),
                     if (selected)
-                      Icon(Icons.check_circle, color: scheme.primary, size: 24),
+                      AppIcon(
+                        AppIcons.check,
+                        color: scheme.onSecondaryContainer,
+                        size: 22,
+                      ),
                   ],
                 ),
                 const SizedBox(height: Space.sm),

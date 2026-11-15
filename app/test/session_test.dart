@@ -341,6 +341,117 @@ void main() {
       expect(s.allPgn, '');
     });
 
+    test('removeSource returns a token; restoreSource brings the capture back where it was, renumbered', () async {
+      final (s, [a, b]) = await two();
+      final first = a.diagrams.first..turn = 'b';
+      final removed = s.removeSource(a)!;
+      expect(removed.restorable, isTrue);
+      expect(removed.index, 0);
+      expect(s.sources, [b]);
+      expect(b.number, 1);
+      expect(s.removeSource(a), isNull);
+
+      expect(s.restoreSource(removed), isTrue);
+      expect(s.sources, [a, b]);
+      expect([a.number, b.number], [1, 2]);
+      expect(a.diagrams.first, same(first));
+      expect(first.turn, 'b');
+      expect(s.diagramCount, 5);
+      expect(s.restoreSource(removed), isFalse); // already back
+    });
+
+    test('a capture removed while it is being read cannot come back', () async {
+      final gate = Completer<void>();
+      final s = Session(
+        readImage: (bytes, {onFound, onBoard}) async {
+          await gate.future;
+          return [board(sample)];
+        },
+      );
+      final src = s.enqueueImage(bytesA);
+      final removed = s.removeSource(src)!;
+      expect(removed.restorable, isFalse);
+      expect(s.restoreSource(removed), isFalse);
+      gate.complete();
+      await src.finished;
+      expect(s.isEmpty, isTrue);
+    });
+
+    test('clear returns a token and restoreCleared puts the captures back before newer ones', () async {
+      final (s, [a, b]) = await two();
+      final token = s.clear()!;
+      expect(s.isEmpty, isTrue);
+      expect(token.sources, [a, b]);
+      expect(s.clear(), isNull);
+
+      final c = s.enqueueImage(bytesA);
+      await c.finished;
+      expect(s.restoreCleared(token), isTrue);
+      expect(s.sources, [a, b, c]);
+      expect([a.number, b.number, c.number], [1, 2, 3]);
+      expect(s.diagramCount, 5 + c.diagrams.length);
+      expect(s.restoreCleared(token), isFalse); // nothing left to bring back
+    });
+
+    test(
+      'a capture that was still reading is not part of the clear token',
+      () async {
+        final gate = Completer<void>();
+        final s = Session(
+          readImage: (bytes, {onFound, onBoard}) async {
+            await gate.future;
+            return [board(sample)];
+          },
+        );
+        s.enqueueImage(bytesA);
+        final token = s.clear()!;
+        expect(token.isEmpty, isTrue);
+        expect(s.restoreCleared(token), isFalse);
+        gate.complete();
+      },
+    );
+
+    test(
+      'a capture notifies its own listeners, not those of another capture',
+      () async {
+        final (s, [a, b]) = await two();
+        var forA = 0, forB = 0;
+        a.addListener(() => forA++);
+        b.addListener(() => forB++);
+        s.removeDiagram(a.diagrams.first);
+        expect([forA, forB], [1, 0]);
+        s.removeDiagram(b.diagrams.last);
+        expect([forA, forB], [1, 1]);
+      },
+    );
+
+    test('flagged lists diagrams with doubts or problems; nextWithDoubtsAfter wraps round', () async {
+      final s = Session(
+        readImage: (bytes, {onFound, onBoard}) async {
+          final doubtful = board(sample)..confidence[0] = 0.5;
+          final boards = [
+            doubtful,
+            board(sample),
+            board('8/8/8/8/8/8/8/4K3'),
+            board(sample)..confidence[9] = 0.2,
+          ];
+          onFound?.call(boards.length, 800, 600);
+          for (final (i, b) in boards.indexed) {
+            onBoard?.call(i, b);
+          }
+          return boards;
+        },
+      );
+      final src = await s.addImage(bytesA);
+      final d = src.diagrams;
+      expect(s.flagged, [d[0], d[2], d[3]]);
+      expect(s.flaggedCount, 3);
+      expect(s.nextWithDoubtsAfter(d[0]), d[3]); // d[2] is only impossible
+      expect(s.nextWithDoubtsAfter(d[3]), d[0]);
+      d[3].confirmSquare(9);
+      expect(s.nextWithDoubtsAfter(d[0]), isNull);
+    });
+
     test('allPgn joins one game per diagram with its global number', () async {
       final (s, _) = await two();
       final pgn = s.allPgn;
@@ -544,12 +655,14 @@ RecognizedBoard fallbackBoard(int doubts) {
 void fallbackRules() {
   group('whole-image fallback', () {
     test('16 or more doubtful squares: the capture ends as noBoards with no diagram', () async {
-      final s = Session(readImage: (bytes, {onFound, onBoard}) async {
-        final boards = [fallbackBoard(16)];
-        onFound?.call(1, 800, 600);
-        onBoard?.call(0, boards.first);
-        return boards;
-      });
+      final s = Session(
+        readImage: (bytes, {onFound, onBoard}) async {
+          final boards = [fallbackBoard(16)];
+          onFound?.call(1, 800, 600);
+          onBoard?.call(0, boards.first);
+          return boards;
+        },
+      );
       final seen = <int>[];
       s.addListener(() => seen.add(s.diagramCount));
       final src = await s.addImage(bytesA);
@@ -557,45 +670,64 @@ void fallbackRules() {
       expect(src.diagrams, isEmpty);
       expect(s.diagramCount, 0);
       expect(src.found, 0);
-      expect(seen.where((n) => n > 0), isEmpty, reason: 'it never flashes in as a diagram first');
+      expect(
+        seen.where((n) => n > 0),
+        isEmpty,
+        reason: 'it never flashes in as a diagram first',
+      );
       expect(src.skeletons, 0);
       expect(src.progressText, isNull);
     });
 
     test('15 doubtful squares: still a plausible reading, kept', () async {
-      final s = Session(readImage: (bytes, {onFound, onBoard}) async {
-        final boards = [fallbackBoard(15)];
-        onFound?.call(1, 800, 600);
-        onBoard?.call(0, boards.first);
-        return boards;
-      });
+      final s = Session(
+        readImage: (bytes, {onFound, onBoard}) async {
+          final boards = [fallbackBoard(15)];
+          onFound?.call(1, 800, 600);
+          onBoard?.call(0, boards.first);
+          return boards;
+        },
+      );
       final src = await s.addImage(bytesA);
       expect(src.status, SourceStatus.done);
       expect(src.diagrams.single.fallback, isTrue);
     });
 
-    test('the rule does not apply to a framed board, however doubtful', () async {
-      final grid = placementToGrid(sample);
-      final framed = RecognizedBoard(const Box(0, 0, 100, 100), grid, List<double>.filled(64, 0.3), grid, false);
-      final s = Session(readImage: (bytes, {onFound, onBoard}) async {
-        onFound?.call(1, 800, 600);
-        onBoard?.call(0, framed);
-        return [framed];
-      });
-      final src = await s.addImage(bytesA);
-      expect(src.status, SourceStatus.done);
-      expect(src.diagrams, hasLength(1));
-    });
+    test(
+      'the rule does not apply to a framed board, however doubtful',
+      () async {
+        final grid = placementToGrid(sample);
+        final framed = RecognizedBoard(
+          const Box(0, 0, 100, 100),
+          grid,
+          List<double>.filled(64, 0.3),
+          grid,
+          false,
+        );
+        final s = Session(
+          readImage: (bytes, {onFound, onBoard}) async {
+            onFound?.call(1, 800, 600);
+            onBoard?.call(0, framed);
+            return [framed];
+          },
+        );
+        final src = await s.addImage(bytesA);
+        expect(src.status, SourceStatus.done);
+        expect(src.diagrams, hasLength(1));
+      },
+    );
 
     test('nor when the fallback is one of several boards', () async {
-      final s = Session(readImage: (bytes, {onFound, onBoard}) async {
-        final boards = [board(sample), fallbackBoard(20)];
-        onFound?.call(2, 800, 600);
-        for (final (i, b) in boards.indexed) {
-          onBoard?.call(i, b);
-        }
-        return boards;
-      });
+      final s = Session(
+        readImage: (bytes, {onFound, onBoard}) async {
+          final boards = [board(sample), fallbackBoard(20)];
+          onFound?.call(2, 800, 600);
+          for (final (i, b) in boards.indexed) {
+            onBoard?.call(i, b);
+          }
+          return boards;
+        },
+      );
       final src = await s.addImage(bytesA);
       expect(src.status, SourceStatus.done);
       expect(src.diagrams, hasLength(2));

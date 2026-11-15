@@ -83,3 +83,15 @@ Future<bool> openInLichess(String fen, {OpenUriFn? open}) async {
     return false;
   }
 }
+
+/// "1 diagrama" / "3 diagramas".
+String diagramsText(int n) => n == 1 ? '1 diagrama' : '$n diagramas';
+
+/// "1 con aviso" / "3 con avisos": how many diagrams need a look, for the export bar.
+String warningsText(int n) => n == 1 ? '1 con aviso' : '$n con avisos';
+
+/// The snackbar after saving: "Guardado: nombre.pgn", plus " · 3 diagramas con avisos" when some diagram still
+/// has doubtful squares or an impossible position.
+String savedMessage(String fileName, {int flagged = 0}) => flagged == 0
+    ? 'Guardado: $fileName'
+    : 'Guardado: $fileName · ${diagramsText(flagged)} con ${flagged == 1 ? 'aviso' : 'avisos'}';

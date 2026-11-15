@@ -16,7 +16,7 @@
 //   registerScene(
 //     'diagram_block',                                   // file name stem; use snake_case
 //     (env) => Scaffold(body: MyScreen(session: env.session)),
-//     settings: () => AppSettings(inkId: 'granate'),     // optional; the theme mode is set per variant
+//     settings: () => AppSettings(stoneId: 'nogal'),       // optional; the theme mode is set per variant
 //     setup: (tester, env) async {                       // optional: interact before the picture is taken
 //       await tester.runAsync(() => env.session.addImage(bytes));
 //       await tester.pump();
@@ -28,7 +28,7 @@
 // The builder receives a [SceneEnv] with the fakes that are also in the `AppScope`: `settings` (in-memory),
 // `session` (a [Session] whose reader returns [fakeBoards]) and `catalog` (the real piece sets, all parsed).
 // The widget it returns is the HOME of a real `ChessPgnApp`, so it gets the real theme, the Spanish
-// localisation, the scope and the system bars handling. Fonts: Archivo, Archivo Condensed, JetBrains Mono and
+// localisation, the scope and the system bars handling. Fonts: Barlow, Barlow Condensed, JetBrains Mono and
 // ChessFigures from assets/fonts, Material Icons from the Flutter SDK cache.
 import 'dart:io';
 import 'dart:ui' show ImageByteFormat;
@@ -126,7 +126,9 @@ void registerScene(
 /// Two boards as the reader would return them: the sample middlegame with squares f6 and c6 doubtful, and an
 /// endgame with one doubtful square.
 List<RecognizedBoard> fakeBoards() {
-  final a = placementToGrid('r1bq1rk1/pp2ppbp/2np1np1/8/3NP3/2N1BP2/PPPQ2PP/2KR1B1R');
+  final a = placementToGrid(
+    'r1bq1rk1/pp2ppbp/2np1np1/8/3NP3/2N1BP2/PPPQ2PP/2KR1B1R',
+  );
   final confA = List<double>.filled(64, 0.99)
     ..[21] = 0.5
     ..[18] = 0.7;
@@ -167,15 +169,15 @@ Future<void> loadRealFonts() async {
   }
 
   const dir = 'assets/fonts';
-  await family('Archivo', [
-    '$dir/Archivo-Regular.ttf',
-    '$dir/Archivo-Medium.ttf',
-    '$dir/Archivo-SemiBold.ttf',
-    '$dir/Archivo-Bold.ttf',
+  await family('Barlow', [
+    '$dir/Barlow-Regular.ttf',
+    '$dir/Barlow-Medium.ttf',
+    '$dir/Barlow-SemiBold.ttf',
+    '$dir/Barlow-Bold.ttf',
   ]);
-  await family('ArchivoCondensed', [
-    '$dir/ArchivoCondensed-SemiBold.ttf',
-    '$dir/ArchivoCondensed-Bold.ttf',
+  await family('BarlowCondensed', [
+    '$dir/BarlowCondensed-SemiBold.ttf',
+    '$dir/BarlowCondensed-Bold.ttf',
   ]);
   await family('JetBrainsMono', [
     '$dir/JetBrainsMono-Regular.ttf',
@@ -190,13 +192,20 @@ String _materialIconsPath() {
     ?Platform.environment['FLUTTER_ROOT'],
     // `flutter` on the PATH: <root>/bin/flutter
     for (final p in (Platform.environment['PATH'] ?? '').split(':'))
-      if (File('$p/flutter').existsSync()) File('$p/flutter').resolveSymbolicLinksSync().replaceFirst(RegExp(r'/bin/flutter$'), ''),
+      if (File('$p/flutter').existsSync())
+        File('$p/flutter')
+            .resolveSymbolicLinksSync()
+            .replaceFirst(RegExp(r'/bin/flutter$'), ''),
   ];
   for (final root in roots) {
-    final f = File('$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
+    final f = File(
+      '$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+    );
     if (f.existsSync()) return f.path;
   }
-  throw StateError('MaterialIcons-Regular.otf not found under the Flutter SDK cache (tried $roots)');
+  throw StateError(
+    'MaterialIcons-Regular.otf not found under the Flutter SDK cache (tried $roots)',
+  );
 }
 
 // ------------------------------------------------------------------------------------------------ render

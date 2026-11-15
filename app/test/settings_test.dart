@@ -9,22 +9,16 @@ void main() {
   test('defaults when nothing is stored', () async {
     final s = await AppSettings.load();
     expect(s.themeMode, ThemeMode.system);
-    expect(s.inkId, 'cobalto');
-    expect(s.boardStyle, BoardStyle.flat);
+    expect(s.stoneId, 'serpentina');
+    expect(s.boardStyle, BoardStyle.stone);
     expect(s.showCoordinates, isTrue);
-    expect(s.pieceSetId, 'merida');
+    expect(s.pieceSetId, 'cburnett');
   });
 
-  test('the ink list holds the six ids and the default is the first', () {
-    expect(inkIds, [
-      'cobalto',
-      'torneo',
-      'granate',
-      'madera',
-      'ciruela',
-      'grafito',
-    ]);
-    expect(defaultInkId, inkIds.first);
+  test('the stone list holds the five ids and the default is the first', () {
+    expect(stoneIds, ['serpentina', 'pizarra', 'alicante', 'nogal', 'granito']);
+    expect(defaultStoneId, stoneIds.first);
+    expect(BoardStyle.values.map((v) => v.name), ['stone', 'flat', 'printed']);
   });
 
   test('every setter saves, notifies, and survives a reload', () async {
@@ -33,65 +27,83 @@ void main() {
     s.addListener(() => notified++);
 
     await s.setThemeMode(ThemeMode.dark);
-    await s.setInkId('granate');
+    await s.setStoneId('granito');
     await s.setBoardStyle(BoardStyle.printed);
     await s.setShowCoordinates(false);
-    await s.setPieceSetId('cburnett');
+    await s.setPieceSetId('merida');
     expect(notified, 5);
 
     final again = await AppSettings.load();
     expect(again.themeMode, ThemeMode.dark);
-    expect(again.inkId, 'granate');
+    expect(again.stoneId, 'granito');
     expect(again.boardStyle, BoardStyle.printed);
     expect(again.showCoordinates, isFalse);
-    expect(again.pieceSetId, 'cburnett');
+    expect(again.pieceSetId, 'merida');
   });
 
   test('setting the same value does not notify', () async {
     final s = await AppSettings.load();
     var notified = 0;
     s.addListener(() => notified++);
-    await s.setInkId('cobalto');
+    await s.setStoneId('serpentina');
     await s.setThemeMode(ThemeMode.system);
     expect(notified, 0);
   });
 
-  test('an unknown ink id is ignored', () async {
+  test('an unknown stone id is ignored', () async {
     final s = await AppSettings.load();
     var notified = 0;
     s.addListener(() => notified++);
-    await s.setInkId('fucsia');
-    expect(s.inkId, 'cobalto');
+    await s.setStoneId('fucsia');
+    expect(s.stoneId, 'serpentina');
     expect(notified, 0);
   });
 
   test('corrupt or unknown stored values fall back to the defaults', () async {
     SharedPreferences.setMockInitialValues({
       'settings.themeMode': 'neon',
-      'settings.inkId': 'fucsia',
+      'settings.stoneId': 'fucsia',
       'settings.boardStyle': 7, // wrong type
       'settings.showCoordinates': 'yes', // wrong type: the typed getter throws
       'settings.pieceSetId': '',
     });
     final s = await AppSettings.load();
     expect(s.themeMode, ThemeMode.system);
-    expect(s.inkId, 'cobalto');
-    expect(s.boardStyle, BoardStyle.flat);
+    expect(s.stoneId, 'serpentina');
+    expect(s.boardStyle, BoardStyle.stone);
     expect(s.showCoordinates, isTrue);
-    expect(s.pieceSetId, 'merida');
+    expect(s.pieceSetId, 'cburnett');
   });
+
+  test(
+    'values stored by the previous design still work or fall back',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'settings.inkId': 'granate', // the old ink: not read any more
+        'settings.stoneId': 'ciruela', // not a stone
+        'settings.boardStyle': 'flat', // an old style that still exists
+      });
+      final s = await AppSettings.load();
+      expect(s.stoneId, 'serpentina');
+      expect(s.boardStyle, BoardStyle.flat);
+      SharedPreferences.setMockInitialValues({
+        'settings.boardStyle': 'printed',
+      });
+      expect((await AppSettings.load()).boardStyle, BoardStyle.printed);
+    },
+  );
 
   test('valid stored values are read back', () async {
     SharedPreferences.setMockInitialValues({
       'settings.themeMode': 'light',
-      'settings.inkId': 'ciruela',
+      'settings.stoneId': 'nogal',
       'settings.boardStyle': 'printed',
       'settings.showCoordinates': false,
       'settings.pieceSetId': 'alpha',
     });
     final s = await AppSettings.load();
     expect(s.themeMode, ThemeMode.light);
-    expect(s.inkId, 'ciruela');
+    expect(s.stoneId, 'nogal');
     expect(s.boardStyle, BoardStyle.printed);
     expect(s.showCoordinates, isFalse);
     expect(s.pieceSetId, 'alpha');
@@ -103,22 +115,22 @@ void main() {
     var notified = 0;
     s.addListener(() => notified++);
 
-    s.ensurePieceSet(['merida', 'alpha'], fallback: 'merida');
-    expect(s.pieceSetId, 'merida');
+    s.ensurePieceSet(['cburnett', 'alpha'], fallback: 'cburnett');
+    expect(s.pieceSetId, 'cburnett');
     expect(notified, 1);
     await Future<void>.delayed(Duration.zero);
-    expect((await AppSettings.load()).pieceSetId, 'merida');
+    expect((await AppSettings.load()).pieceSetId, 'cburnett');
 
-    s.ensurePieceSet(['merida', 'alpha'], fallback: 'alpha'); // already valid
-    expect(s.pieceSetId, 'merida');
+    s.ensurePieceSet(['cburnett', 'alpha'], fallback: 'alpha'); // already valid
+    expect(s.pieceSetId, 'cburnett');
     expect(notified, 1);
   });
 
   test(
-    'the plain constructor works without storage and sanitises the ink',
+    'the plain constructor works without storage and sanitises the stone',
     () async {
-      final s = AppSettings(inkId: 'nope', themeMode: ThemeMode.dark);
-      expect(s.inkId, 'cobalto');
+      final s = AppSettings(stoneId: 'nope', themeMode: ThemeMode.dark);
+      expect(s.stoneId, 'serpentina');
       await s.setBoardStyle(BoardStyle.printed);
       expect(s.boardStyle, BoardStyle.printed);
     },

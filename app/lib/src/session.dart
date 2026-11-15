@@ -5,6 +5,8 @@
 // UI contract:
 //  * Listen to the [Session] (a [ChangeNotifier]) for structure and progress: captures added/removed,
 //    reading progress, diagrams added/removed/replaced.
+//  * Listen to a [SourceImage] (also a [ChangeNotifier]) for the changes of that capture only (its progress, its
+//    diagrams): a group of the list rebuilds on its own source, not on every change of the session.
 //  * Listen to each [Diagram] (also a [ChangeNotifier]) for edits of that diagram (square, turn, castling).
 //    The session does not forward them: it does not need to, `allPgn` is computed on demand.
 import 'dart:async';
@@ -64,7 +66,7 @@ enum SourceStatus {
 }
 
 /// One captured image and what was read from it.
-class SourceImage {
+class SourceImage extends ChangeNotifier {
   SourceImage._(this.id, this.bytes, this._number);
 
   /// Unique within the run and never reused: a stable key for widgets.
@@ -155,6 +157,8 @@ class SourceImage {
 
   /// Completes when this capture is no longer pending (done, noBoards, failed or removed).
   Future<void> get finished => _finished.future;
+
+  void _touch() => notifyListeners();
 }
 
 /// How many doubtful squares make the reading of a whole-image fallback board implausible.
@@ -177,6 +181,31 @@ class RemovedDiagram {
 
   /// Position the diagram had inside [source].
   final int index;
+}
+
+/// What [Session.removeSource] took out; hand it to [Session.restoreSource] to undo ("Deshacer").
+class RemovedSource {
+  const RemovedSource._(this.source, this.index, this.restorable);
+
+  final SourceImage source;
+
+  /// Position the capture had in the session.
+  final int index;
+
+  /// False for a capture that was still being read: its reader was told to stop, so it cannot come back as it
+  /// was (add the image again instead).
+  final bool restorable;
+}
+
+/// What [Session.clear] took out; hand it to [Session.restoreCleared] to undo ("Deshacer").
+class ClearedSession {
+  const ClearedSession._(this.sources);
+
+  /// The captures that were read (or had failed) when the session was cleared, in order.
+  final List<SourceImage> sources;
+
+  /// Nothing can come back (every capture was still being read).
+  bool get isEmpty => sources.isEmpty;
 }
 
 class Session extends ChangeNotifier {
@@ -236,6 +265,27 @@ class Session extends ChangeNotifier {
     return null;
   }
 
+  /// Diagrams with doubtful squares or an impossible position, in display order.
+  List<Diagram> get flagged => [
+    for (final d in diagrams)
+      if (d.hasWarnings) d,
+  ];
+
+  /// How many diagrams are [flagged].
+  int get flaggedCount => flagged.length;
+
+  /// The next diagram after [diagram] (display order, wrapping round) that still has doubtful squares; null when
+  /// no other diagram has any.
+  Diagram? nextWithDoubtsAfter(Diagram diagram) {
+    final all = diagrams;
+    final at = all.indexWhere((d) => identical(d, diagram));
+    for (var i = 1; i <= all.length; i++) {
+      final d = all[(at + i) % all.length];
+      if (!identical(d, diagram) && d.hasDoubts) return d;
+    }
+    return null;
+  }
+
   /// PGN of every diagram, one game each (`[Event "Diagrama N"]`), joined as the app has always exported.
   String get allPgn =>
       [for (final (i, d) in diagrams.indexed) d.pgn(i + 1)].join('\n');
@@ -285,7 +335,7 @@ class Session extends ChangeNotifier {
       .._status = SourceStatus.queued
       .._finished = Completer<void>();
     _queue.add(source);
-    _changed();
+    _changed(source: source);
     _pump();
   }
 
@@ -312,7 +362,7 @@ class Session extends ChangeNotifier {
 
   Future<void> _read(SourceImage source) async {
     source._status = SourceStatus.reading;
-    _changed();
+    _changed(source: source);
     final done = <int, RecognizedBoard>{};
     var next = 0; // index of the next board to release into source.diagrams
 
@@ -339,13 +389,13 @@ class Session extends ChangeNotifier {
             .._found = count
             .._width = width
             .._height = height;
-          _changed();
+          _changed(source: source);
         },
         onBoard: (index, board) {
           if (source._discarded) return;
           done[index] = board;
           release();
-          _changed();
+          _changed(source: source);
         },
       );
       if (source._discarded) return;
@@ -367,7 +417,7 @@ class Session extends ChangeNotifier {
         .._errorMessage = _describeFailure(e, whole: true);
     } finally {
       _complete(source);
-      _changed();
+      _changed(source: source);
     }
   }
 
@@ -404,7 +454,7 @@ class Session extends ChangeNotifier {
       throw ReadFailure(_describeFailure(e, whole: false), e);
     } finally {
       _regionReads--;
-      _changed();
+      _changed(source: source);
     }
     if (source._discarded) {
       throw const ReadFailure(
@@ -428,7 +478,7 @@ class Session extends ChangeNotifier {
         .._errorMessage = null
         .._error = null;
     }
-    _changed();
+    _changed(source: source);
     return fresh;
   }
 
@@ -441,7 +491,7 @@ class Session extends ChangeNotifier {
       final i = s._diagrams.indexWhere((d) => identical(d, diagram));
       if (i < 0) continue;
       s._diagrams.removeAt(i);
-      _changed();
+      _changed(source: s);
       return RemovedDiagram._(diagram, s, i);
     }
     return null;
@@ -457,24 +507,45 @@ class Session extends ChangeNotifier {
       removed.index.clamp(0, s._diagrams.length),
       removed.diagram,
     );
-    _changed();
+    _changed(source: s);
     return true;
   }
 
   /// Removes a capture with its diagrams (also while it is being read: the result is discarded). Later
-  /// captures are renumbered.
-  void removeSource(SourceImage source) {
-    if (!_sources.remove(source)) return;
+  /// captures are renumbered. Returns what [restoreSource] needs to undo it; null if it was not in the session.
+  RemovedSource? removeSource(SourceImage source) {
+    final index = _sources.indexOf(source);
+    if (index < 0) return null;
+    _sources.removeAt(index);
+    final restorable = !source.isPending;
     source._discarded = true;
     _queue.remove(source);
     _complete(source); // a reader that is still running ignores it from now on
     _renumber();
-    _changed();
+    _changed(source: source);
+    return RemovedSource._(source, index, restorable);
   }
 
-  /// "Vaciar sesión": removes every capture.
-  void clear() {
-    if (_sources.isEmpty) return;
+  /// Undoes [removeSource]: the capture returns at its old position with its diagrams and edits intact, and the
+  /// captures after it are renumbered. False when it cannot (it was being read, or it is already back).
+  bool restoreSource(RemovedSource removed) {
+    final s = removed.source;
+    if (!removed.restorable || _sources.contains(s)) return false;
+    s._discarded = false;
+    _sources.insert(removed.index.clamp(0, _sources.length), s);
+    _renumber();
+    _changed(source: s);
+    return true;
+  }
+
+  /// "Quitar todas las capturas": removes every capture. Returns the token for [restoreCleared]; null when there
+  /// was nothing to clear.
+  ClearedSession? clear() {
+    if (_sources.isEmpty) return null;
+    final kept = [
+      for (final s in _sources)
+        if (!s.isPending) s,
+    ];
     for (final s in _sources) {
       s._discarded = true;
       _complete(s);
@@ -482,6 +553,27 @@ class Session extends ChangeNotifier {
     _sources.clear();
     _queue.clear();
     _changed();
+    return ClearedSession._(kept);
+  }
+
+  /// Undoes [clear]: the captures that had been read come back, before anything added since, and everything is
+  /// renumbered. False when there is nothing to bring back.
+  bool restoreCleared(ClearedSession cleared) {
+    final back = [
+      for (final s in cleared.sources)
+        if (!_sources.contains(s)) s,
+    ];
+    if (back.isEmpty) return false;
+    for (final s in back) {
+      s._discarded = false;
+    }
+    _sources.insertAll(0, back);
+    _renumber();
+    _changed();
+    for (final s in back) {
+      s._touch();
+    }
+    return true;
   }
 
   void _renumber() {
@@ -532,8 +624,10 @@ class Session extends ChangeNotifier {
 
   // ------------------------------------------------------------------ misc
 
-  void _changed() {
-    if (!_disposed) notifyListeners();
+  void _changed({SourceImage? source}) {
+    if (_disposed) return;
+    source?._touch();
+    notifyListeners();
   }
 
   @override

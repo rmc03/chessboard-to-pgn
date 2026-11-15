@@ -43,7 +43,7 @@ Stream<LicenseEntry> bundledLicenses(AssetBundle bundle) async* {
 
   // Fonts
   final fonts = <(List<String>, String)>[
-    (['Archivo', 'Archivo Condensed'], 'assets/fonts/OFL-Archivo.txt'),
+    (['Barlow', 'Barlow Condensed'], 'assets/fonts/OFL-Barlow.txt'),
     (['JetBrains Mono'], 'assets/fonts/OFL-JetBrainsMono.txt'),
     (['ChessFigures (DejaVu Sans)'], 'assets/fonts/LICENSE-DejaVu.txt'),
   ];
@@ -67,13 +67,16 @@ Stream<LicenseEntry> bundledLicenses(AssetBundle bundle) async* {
     final name = 'Piezas ${s['name']}';
     final license = s['license'] as String;
     (byLicense[license] ??= []).add(name);
-    yield LicenseEntryWithLineBreaks([name], [
-      'Juego de piezas ${s['name']}.',
-      'Autor: ${s['author']}.',
-      'Licencia: $license (${s['licenseUrl']}).',
-      'Origen: ${s['source']}.',
-      'Los dibujos se incluyen sin cambios.',
-    ].join('\n\n'));
+    yield LicenseEntryWithLineBreaks(
+      [name],
+      [
+        'Juego de piezas ${s['name']}.',
+        'Autor: ${s['author']}.',
+        'Licencia: $license (${s['licenseUrl']}).',
+        'Origen: ${s['source']}.',
+        'Los dibujos se incluyen sin cambios.',
+      ].join('\n\n'),
+    );
   }
   for (final e in byLicense.entries) {
     final path = _licenseFiles[e.key];

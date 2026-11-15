@@ -3,6 +3,8 @@
 import 'package:chessboard_pgn/main.dart';
 import 'package:chessboard_pgn/src/settings.dart';
 import 'package:chessboard_pgn/src/ui/board.dart';
+import 'package:chessboard_pgn/src/ui/icons.dart';
+import 'package:chessboard_pgn/src/ui/plate.dart';
 import 'package:chessboard_pgn/src/ui/pieces.dart';
 import 'package:chessboard_pgn/src/ui/settings_page.dart';
 import 'package:chessboard_pgn/src/ui/theme.dart';
@@ -26,12 +28,12 @@ void registerAllScenes() {
     desktopSize: const Size(1280, 1000),
   );
   registerScene(
-    'settings_granate_printed',
+    'settings_nogal_printed',
     (env) => const SettingsPage(appVersion: kAppVersion),
     settings: () => AppSettings(
-      inkId: 'granate',
+      stoneId: 'nogal',
       boardStyle: BoardStyle.printed,
-      pieceSetId: 'cburnett',
+      pieceSetId: 'merida',
     ),
     phoneSize: const Size(412, 2500),
     desktopSize: const Size(1280, 1000),
@@ -39,8 +41,8 @@ void registerAllScenes() {
   registerScene(
     'board_gallery',
     (env) => const _BoardGallery(),
-    phoneSize: const Size(412, 1700),
-    desktopSize: const Size(1280, 1100),
+    phoneSize: const Size(412, 2300),
+    desktopSize: const Size(1280, 1500),
   );
   registerScene(
     'piece_sets',
@@ -106,7 +108,7 @@ class _BoardGallery extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final w = MediaQuery.sizeOf(context).width;
     final gutter = Space.gutter(w);
-    final columns = w >= 900 ? 4 : 2;
+    final columns = w >= 900 ? 5 : 2;
     const gap = Space.lg;
     final side = (w - 2 * gutter - gap * (columns - 1)) / columns;
     final grid = sampleGrid();
@@ -118,7 +120,7 @@ class _BoardGallery extends StatelessWidget {
           spacing: gap,
           runSpacing: Space.xl,
           children: [
-            for (final ink in inks)
+            for (final stone in stones)
               for (final style in BoardStyle.values)
                 SizedBox(
                   width: side,
@@ -126,7 +128,11 @@ class _BoardGallery extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${ink.name} · ${style == BoardStyle.flat ? 'liso' : 'impreso'}',
+                        '${stone.name} · ${switch (style) {
+                          BoardStyle.stone => 'piedra',
+                          BoardStyle.flat => 'liso',
+                          BoardStyle.printed => 'impreso',
+                        }}',
                         style: text.labelLarge?.copyWith(
                           color: scheme.onSurface,
                         ),
@@ -134,7 +140,7 @@ class _BoardGallery extends StatelessWidget {
                       const SizedBox(height: Space.sm),
                       BoardView.fromGrid(
                         grid: grid,
-                        ink: ink,
+                        stone: stone,
                         style: style,
                         size: side,
                         showCoordinates: true,
@@ -286,11 +292,13 @@ class _TypeSpecimen extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text('12', style: app.numeral.copyWith(color: scheme.primary)),
+            const EnamelPlate.numeral(12),
+            const SizedBox(width: Space.md),
+            const EnamelPlate.label('CAPTURA 1'),
             const SizedBox(width: Space.md),
             Text(
               'Chess to PGN',
-              style: app.masthead.copyWith(color: scheme.onSurface),
+              style: app.masthead.copyWith(color: scheme.primary),
             ),
           ],
         ),
@@ -340,7 +348,7 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
       padding: const EdgeInsets.only(top: Space.xl, bottom: Space.sm),
       child: Text(s, style: t.titleMedium?.copyWith(color: scheme.primary)),
     );
-    Widget band(Color bg, Color fg, IconData icon, String text) => Container(
+    Widget band(Color bg, Color fg, AppIconData icon, String text) => Container(
       padding: const EdgeInsets.symmetric(
         horizontal: Space.md,
         vertical: Space.md,
@@ -351,7 +359,7 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
       ),
       child: Row(
         children: [
-          Icon(icon, color: fg),
+          AppIcon(icon, color: fg),
           const SizedBox(width: Space.md),
           Expanded(
             child: Text(text, style: t.bodyMedium?.copyWith(color: fg)),
@@ -365,19 +373,19 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
         actions: [
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.settings_outlined),
+            icon: const AppIcon(AppIcons.settings),
             tooltip: 'Ajustes',
           ),
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.more_vert),
+            icon: const AppIcon(AppIcons.more),
             tooltip: 'Más',
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {},
-        icon: const Icon(Icons.add_photo_alternate_outlined),
+        icon: const AppIcon(AppIcons.addCapture),
         label: const Text('Añadir captura'),
       ),
       body: ListView(
@@ -388,15 +396,34 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
           96,
         ),
         children: [
+          head('Placas'),
+          Wrap(
+            spacing: Space.md,
+            runSpacing: Space.md,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const EnamelPlate.numeral(2),
+              const EnamelPlate.numeral(14),
+              const EnamelPlate.label('CAPTURA 1'),
+              FilledButton.icon(
+                style: plateButtonStyle(context),
+                onPressed: () {},
+                icon: const AppIcon(AppIcons.addCapture),
+                label: const Text('Elegir captura'),
+              ),
+              FilledButton(
+                style: plateButtonStyle(context),
+                onPressed: null,
+                child: const Text('Desactivado'),
+              ),
+            ],
+          ),
           head('Botones'),
           Wrap(
             spacing: Space.sm,
             runSpacing: Space.sm,
             children: [
-              FilledButton(
-                onPressed: () {},
-                child: const Text('Elegir captura'),
-              ),
+              FilledButton(onPressed: () {}, child: const Text('Rellenado')),
               FilledButton.tonal(
                 onPressed: () {},
                 child: const Text('Guardar .pgn'),
@@ -409,17 +436,17 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
               const FilledButton(onPressed: null, child: Text('Desactivado')),
               FilledButton.icon(
                 onPressed: () {},
-                icon: const Icon(Icons.open_in_new),
+                icon: const AppIcon(AppIcons.openExternal),
                 label: const Text('Analizar en Lichess'),
               ),
               IconButton.filledTonal(
                 onPressed: () {},
-                icon: const Icon(Icons.share_outlined),
+                icon: const AppIcon(AppIcons.share),
                 tooltip: 'Compartir',
               ),
               IconButton(
                 onPressed: () {},
-                icon: const Icon(Icons.delete_outline),
+                icon: const AppIcon(AppIcons.delete),
                 tooltip: 'Eliminar',
               ),
             ],
@@ -427,6 +454,7 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
           head('Segmentado'),
           SegmentedButton<int>(
             expandedInsets: EdgeInsets.zero,
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: 0, label: Text('Leído')),
               ButtonSegment(value: 1, label: Text('Original')),
@@ -437,16 +465,17 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
           const SizedBox(height: Space.sm),
           SegmentedButton<int>(
             expandedInsets: EdgeInsets.zero,
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(
                 value: 0,
                 label: Text('Mueven blancas'),
-                icon: Icon(Icons.circle_outlined),
+                icon: _Disc(filled: false),
               ),
               ButtonSegment(
                 value: 1,
                 label: Text('Mueven negras'),
-                icon: Icon(Icons.circle),
+                icon: _Disc(filled: true),
               ),
             ],
             selected: const {1},
@@ -474,7 +503,7 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
               ),
               ActionChip(
                 label: const Text('Revisar dudosas'),
-                avatar: const Icon(Icons.warning_amber_rounded, size: 18),
+                avatar: const AppIcon(AppIcons.warning, size: 18),
                 onPressed: () {},
               ),
             ],
@@ -496,44 +525,44 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
           const Divider(),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.description_outlined),
+            leading: const AppIcon(AppIcons.licenses),
             title: const Text('Licencias'),
             subtitle: const Text('Piezas, fuentes y paquetes'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const AppIcon(AppIcons.go),
             onTap: () {},
           ),
           head('Estados'),
           band(
             app.warningContainer,
             app.onWarningContainer,
-            Icons.warning_amber_rounded,
+            AppIcons.warning,
             '2 casillas dudosas',
           ),
           const SizedBox(height: Space.sm),
           band(
             scheme.errorContainer,
             scheme.onErrorContainer,
-            Icons.error_outline,
+            AppIcons.error,
             'Posición imposible: falta el rey blanco.',
           ),
           const SizedBox(height: Space.sm),
           band(
             scheme.surfaceContainerHigh,
             scheme.onSurface,
-            Icons.info_outline,
+            AppIcons.noBoard,
             'No se encontró ningún tablero en esta captura.',
           ),
           const SizedBox(height: Space.md),
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: app.warning),
+              AppIcon(AppIcons.warning, color: app.warning),
               const SizedBox(width: Space.sm),
               Text(
                 'Casilla dudosa',
                 style: t.bodyMedium?.copyWith(color: app.warning),
               ),
               const SizedBox(width: Space.xl),
-              Icon(Icons.error_outline, color: scheme.error),
+              AppIcon(AppIcons.error, color: scheme.error),
               const SizedBox(width: Space.sm),
               Text('Error', style: t.bodyMedium?.copyWith(color: scheme.error)),
             ],
@@ -652,4 +681,25 @@ class _OverlaySpecimen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The disc of a turn segment: outline for White, solid for Black.
+class _Disc extends StatelessWidget {
+  const _Disc({required this.filled});
+
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 18,
+    height: 18,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: filled ? Colors.black : Colors.white,
+      border: Border.all(
+        color: filled ? Colors.black : Colors.black87,
+        width: 2,
+      ),
+    ),
+  );
 }

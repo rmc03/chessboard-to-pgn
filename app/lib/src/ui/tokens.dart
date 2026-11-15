@@ -1,109 +1,95 @@
-// Design tokens of the "Dos tintas" direction (docs/ux-spec.md, section 2): the six inks, spacing, radii,
-// breakpoints, motion and the few fixed colours of the board marks. This is the ONLY file with colour literals
-// (the other UI code takes colours from the Material colour scheme or from [AppTheme]).
+// Design tokens of the "Plaza" world (docs/ux-spec.md, section 2): the five stones of the board, the fixed
+// colours of the board and its marks, spacing, radii, breakpoints and motion. The palette of the Material colour
+// scheme lives in theme.dart; together they are the ONLY files with colour literals (the other UI code takes
+// colours from the colour scheme or from [AppTheme]).
 import 'package:material_ui/material_ui.dart';
 
-import '../settings.dart' show defaultInkId;
+import '../settings.dart' show defaultStoneId;
 
-/// One of the six spot inks (named SpotInk because Material already has an `Ink` widget). The whole app (masthead, board squares, selection, numerals) is printed with it.
+/// A stone the board is laid in (the setting "Piedra"). It changes the board only: the shell is always park-bench
+/// green.
 @immutable
-class SpotInk {
-  const SpotInk({
+class Stone {
+  const Stone({
     required this.id,
     required this.name,
-    required this.seed,
     required this.lightSquare,
     required this.darkSquare,
   });
 
-  /// One of `inkIds` in settings.dart.
+  /// One of `stoneIds` in settings.dart.
   final String id;
 
   /// Spanish name shown in Ajustes.
   final String name;
 
-  /// Seed of the Material colour scheme (fidelity variant).
-  final Color seed;
-
-  /// Flat board: light square.
+  /// Light square.
   final Color lightSquare;
 
-  /// Flat board: dark square. A mid tone (L* 55-68) that keeps a white piece at 3:1 or more.
+  /// Dark square: a mid tone (L* 55-65) that keeps a white piece body at 3:1 or more.
   final Color darkSquare;
 
   @override
-  bool operator ==(Object other) => other is SpotInk && other.id == id;
+  bool operator ==(Object other) => other is Stone && other.id == id;
 
   @override
   int get hashCode => id.hashCode;
 }
 
-/// The inks in the order they are offered; ids match `inkIds` in settings.dart.
+/// The stones in the order they are offered; ids match `stoneIds` in settings.dart.
 ///
-/// The seeds and light squares are the spec's. The dark squares differ from the spec's table by the smallest
-/// step that lets a white piece body keep 3:1 against them (same hue and chroma in CIELAB, lightness lowered
-/// to L* 61; the spec values were L* 61-68 and gave 2.4-2.9:1):
-///   cobalto #7F9DCB -> #7795C3, torneo #7FA37F -> #799C79, granate #C08A86 -> #BC8682,
-///   madera #B98C5E -> #B78A5D, ciruela #A48BB3 -> #A38AB2, grafito #A3A6AA -> #919397.
-const List<SpotInk> inks = [
-  SpotInk(
-    id: 'cobalto',
-    name: 'Azul cobalto',
-    seed: Color(0xFF1F4E9A),
-    lightSquare: Color(0xFFEEF1F6),
-    darkSquare: Color(0xFF7795C3),
+/// The values are the spec's, except two dark squares that the L* 55-65 rule pushed a step lighter (same hue
+/// and chroma in CIELAB): alicante #A8776A (L* 54.6) -> #AB7A6D (55.8) and nogal #9C7653 (52.6) -> #A47D59 (55.4).
+const List<Stone> stones = [
+  Stone(
+    id: 'serpentina',
+    name: 'Serpentina',
+    lightSquare: Color(0xFFE8E1CD),
+    darkSquare: Color(0xFF76927F),
   ),
-  SpotInk(
-    id: 'torneo',
-    name: 'Verde torneo',
-    seed: Color(0xFF2E6B4A),
-    lightSquare: Color(0xFFEDF2E6),
-    darkSquare: Color(0xFF799C79),
+  Stone(
+    id: 'pizarra',
+    name: 'Pizarra',
+    lightSquare: Color(0xFFE9E8E4),
+    darkSquare: Color(0xFF7D8590),
   ),
-  SpotInk(
-    id: 'granate',
-    name: 'Granate',
-    seed: Color(0xFF8E2F3C),
-    lightSquare: Color(0xFFF4ECE8),
-    darkSquare: Color(0xFFBC8682),
+  Stone(
+    id: 'alicante',
+    name: 'Rojo Alicante',
+    lightSquare: Color(0xFFEADFCC),
+    darkSquare: Color(0xFFAB7A6D),
   ),
-  SpotInk(
-    id: 'madera',
-    name: 'Madera',
-    seed: Color(0xFF8A5A2B),
-    lightSquare: Color(0xFFF0DFC0),
-    darkSquare: Color(0xFFB78A5D),
+  Stone(
+    id: 'nogal',
+    name: 'Nogal',
+    lightSquare: Color(0xFFEBD9B8),
+    darkSquare: Color(0xFFA47D59),
   ),
-  SpotInk(
-    id: 'ciruela',
-    name: 'Ciruela',
-    seed: Color(0xFF6A3F7A),
-    lightSquare: Color(0xFFF0EAF2),
-    darkSquare: Color(0xFFA38AB2),
-  ),
-  SpotInk(
-    id: 'grafito',
-    name: 'Grafito',
-    seed: Color(0xFF4A4F57),
-    lightSquare: Color(0xFFF1F1EF),
-    darkSquare: Color(0xFF919397),
+  Stone(
+    id: 'granito',
+    name: 'Granito',
+    lightSquare: Color(0xFFE3E1DA),
+    darkSquare: Color(0xFF8F918C),
   ),
 ];
 
-/// The ink with this id; the default ink for an unknown id.
-SpotInk inkById(String id) => inks.firstWhere(
-  (i) => i.id == id,
-  orElse: () => inks.firstWhere((i) => i.id == defaultInkId),
+/// The stone with this id; the default stone for an unknown id.
+Stone stoneById(String id) => stones.firstWhere(
+  (s) => s.id == id,
+  orElse: () => stones.firstWhere((s) => s.id == defaultStoneId),
 );
 
-/// The ink every screen uses until the user picks another.
-SpotInk get defaultInk => inkById(defaultInkId);
+/// The stone every screen uses until the user picks another.
+Stone get defaultStone => stoneById(defaultStoneId);
 
-/// Fixed colours of the board marks. The board is the constant of the design: its marks do not change with
-/// the theme brightness.
+/// Fixed colours of the board and its marks. The board is the constant of the design: it does not change with
+/// the theme brightness (only the glow of the doubtful mark does).
 abstract final class BoardMarks {
-  /// Doubtful square: corner triangle and 2 dp rule.
-  static const Color doubt = Color(0xFFFFB300);
+  /// Doubtful square, light theme: street-lamp amber (corner triangle and 2 dp rule).
+  static const Color doubt = Color(0xFFD98E00);
+
+  /// Doubtful square, dark theme: the lamp lit.
+  static const Color doubtLamp = Color(0xFFFFB93D);
 
   /// Thin dark edge that makes the amber readable on light and mid-tone squares alike.
   static const Color doubtEdge = Color(0xFF241A00);
@@ -111,12 +97,45 @@ abstract final class BoardMarks {
   /// Light squares of the printed style (the paper).
   static const Color paper = Color(0xFFFFFFFF);
 
-  /// Outline and body colours of the typographic piece set.
+  /// Outline and body colours of the typographic piece set; black of the printed hatching.
   static const Color pieceBlack = Color(0xFF000000);
   static const Color pieceWhite = Color(0xFFFFFFFF);
 
-  /// Seed of the amber the warning roles are derived from (before harmonising with the ink).
-  static const Color warningSeed = Color(0xFFE59A00);
+  /// Polished granite of the board frame (the body of its 135 degree gradient; the ends are derived).
+  static const Color frame = Color(0xFF4A4C48);
+
+  /// Park-bench green the selection ring is derived from (darkened per stone until it keeps 3:1).
+  static const Color selection = Color(0xFF1F5C46);
+}
+
+/// The chips of the stone textures: (colour, opacity). The terrazzo of the squares is dark brown, black, tan,
+/// white, cream and green chips at 16-34 % (almost invisible on purpose: legible first, texture after); the
+/// granite of the frame is fine white and black grains.
+abstract final class BoardTexture {
+  static const List<(Color, double)> terrazzo = [
+    (Color(0xFF3A332A), 0.20),
+    (Color(0xFF2C2A26), 0.16),
+    (Color(0xFFA57C52), 0.26),
+    (Color(0xFFFFFFFF), 0.34),
+    (Color(0xFFFFFFFF), 0.22),
+    (Color(0xFFD9C9A4), 0.30),
+    (Color(0xFF40564A), 0.22),
+    (Color(0xFF8A9A8D), 0.24),
+  ];
+
+  static const List<(Color, double)> granite = [
+    (Color(0xFFFFFFFF), 0.16),
+    (Color(0xFF000000), 0.30),
+    (Color(0xFFFFFFFF), 0.12),
+    (Color(0xFF000000), 0.22),
+  ];
+
+  /// Bevel of the frame: light on the top-left edge, shade on the bottom-right edge.
+  static const Color bevelLight = Color(0x57FFFFFF);
+  static const Color bevelShade = Color(0x80000000);
+
+  /// Hairline around the squares, inside the frame.
+  static const Color hairline = Color(0x99000000);
 }
 
 /// Spacing on the 4 dp grid.
@@ -134,14 +153,14 @@ abstract final class Space {
 
 /// Corner radii.
 abstract final class Corner {
-  /// Containers: sheets, dialogs, tonal panels.
-  static const double container = 12;
+  /// Containers: diagram blocks, bottom sheets (top corners), dialogs.
+  static const double container = 10;
 
-  /// Small controls: buttons, chips, segmented buttons, menus.
-  static const double control = 8;
+  /// Controls: buttons, segmented buttons, chips, fields, snackbar, tooltip, menus, plates. Never a capsule.
+  static const double control = 6;
 
-  /// Floating action button.
-  static const double fab = 16;
+  /// Floating action button (a plate).
+  static const double fab = 6;
 }
 
 /// Window width classes (dp).

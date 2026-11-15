@@ -1,4 +1,4 @@
-// User preferences (theme, ink, board look, piece set), persisted with shared_preferences.
+// User preferences (theme, stone, board look, piece set), persisted with shared_preferences.
 //
 // The app loads them once at startup ([AppSettings.load]) and listens to the object: every setter updates the
 // in-memory value and notifies first (so the UI changes live), then writes to storage.
@@ -6,25 +6,27 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Ids of the six inks, in the order they are offered. The theme code keys its palette table by these.
-const List<String> inkIds = [
-  'cobalto',
-  'torneo',
-  'granate',
-  'madera',
-  'ciruela',
-  'grafito',
+/// Ids of the five stones of the board, in the order they are offered. `stones` in tokens.dart is keyed by these.
+const List<String> stoneIds = [
+  'serpentina',
+  'pizarra',
+  'alicante',
+  'nogal',
+  'granito',
 ];
 
-const String defaultInkId = 'cobalto';
-const String defaultPieceSetId = 'merida';
+const String defaultStoneId = 'serpentina';
+const String defaultPieceSetId = 'cburnett';
 
 /// How the squares of a board are drawn.
 enum BoardStyle {
-  /// Plain flat squares.
+  /// A table of stone: squares of the chosen stone with a faint terrazzo speckle in a polished granite frame.
+  stone,
+
+  /// Plain flat squares with a 1 dp rule.
   flat,
 
-  /// Like the printed diagrams of a book: white light squares, dark squares hatched in the ink.
+  /// Like the printed diagrams of a book: white light squares, dark squares hatched in black.
   printed,
 }
 
@@ -34,25 +36,28 @@ class AppSettings extends ChangeNotifier {
   /// In-memory settings with no storage behind them (tests, previews). Invalid values are replaced by defaults.
   AppSettings({
     this._themeMode = ThemeMode.system,
-    String inkId = defaultInkId,
-    this._boardStyle = BoardStyle.flat,
+    String stoneId = defaultStoneId,
+    this._boardStyle = BoardStyle.stone,
     this._showCoordinates = true,
     String pieceSetId = defaultPieceSetId,
-  }) : _inkId = inkIds.contains(inkId) ? inkId : defaultInkId,
+    // Legacy: the ink of the previous design. There are no inks any more, so it is ignored (the default stone
+    // is used); it only keeps old call sites compiling.
+    String? inkId,
+  }) : _stoneId = stoneIds.contains(stoneId) ? stoneId : defaultStoneId,
        _pieceSetId = pieceSetId.isEmpty ? defaultPieceSetId : pieceSetId,
        _prefs = null;
 
   AppSettings._stored(
     SharedPreferences this._prefs, {
     required this._themeMode,
-    required this._inkId,
+    required this._stoneId,
     required this._boardStyle,
     required this._showCoordinates,
     required this._pieceSetId,
   });
 
   static const _kTheme = 'settings.themeMode';
-  static const _kInk = 'settings.inkId';
+  static const _kStone = 'settings.stoneId';
   static const _kBoardStyle = 'settings.boardStyle';
   static const _kCoordinates = 'settings.showCoordinates';
   static const _kPieceSet = 'settings.pieceSetId';
@@ -79,14 +84,14 @@ class AppSettings extends ChangeNotifier {
     }
 
     final themeName = read((p) => p.getString(_kTheme));
-    final ink = read((p) => p.getString(_kInk));
+    final stone = read((p) => p.getString(_kStone));
     final styleName = read((p) => p.getString(_kBoardStyle));
     final pieceSet = read((p) => p.getString(_kPieceSet));
     return AppSettings._stored(
       store,
       themeMode: ThemeMode.values.asNameMap()[themeName] ?? ThemeMode.system,
-      inkId: inkIds.contains(ink) ? ink! : defaultInkId,
-      boardStyle: BoardStyle.values.asNameMap()[styleName] ?? BoardStyle.flat,
+      stoneId: stoneIds.contains(stone) ? stone! : defaultStoneId,
+      boardStyle: BoardStyle.values.asNameMap()[styleName] ?? BoardStyle.stone,
       showCoordinates: read((p) => p.getBool(_kCoordinates)) ?? true,
       pieceSetId: (pieceSet == null || pieceSet.isEmpty)
           ? defaultPieceSetId
@@ -96,7 +101,7 @@ class AppSettings extends ChangeNotifier {
 
   final SharedPreferences? _prefs;
   ThemeMode _themeMode;
-  String _inkId;
+  String _stoneId;
   BoardStyle _boardStyle;
   bool _showCoordinates;
   String _pieceSetId;
@@ -104,10 +109,10 @@ class AppSettings extends ChangeNotifier {
   /// System / light / dark. Default: [ThemeMode.system].
   ThemeMode get themeMode => _themeMode;
 
-  /// One of [inkIds]. Default: [defaultInkId].
-  String get inkId => _inkId;
+  /// One of [stoneIds]. Default: [defaultStoneId]. (A stored id of the old inks falls back to the default.)
+  String get stoneId => _stoneId;
 
-  /// Default: [BoardStyle.flat].
+  /// Default: [BoardStyle.stone].
   BoardStyle get boardStyle => _boardStyle;
 
   /// Draw a–h / 1–8 around the board. Default: true.
@@ -125,11 +130,11 @@ class AppSettings extends ChangeNotifier {
     (p) => p.setString(_kTheme, value.name),
   );
 
-  /// Ignored (no change, no notification) when [id] is not one of [inkIds].
-  Future<void> setInkId(String id) => _set(
-    !inkIds.contains(id) || _inkId == id,
-    () => _inkId = id,
-    (p) => p.setString(_kInk, id),
+  /// Ignored (no change, no notification) when [id] is not one of [stoneIds].
+  Future<void> setStoneId(String id) => _set(
+    !stoneIds.contains(id) || _stoneId == id,
+    () => _stoneId = id,
+    (p) => p.setString(_kStone, id),
   );
 
   Future<void> setBoardStyle(BoardStyle value) => _set(

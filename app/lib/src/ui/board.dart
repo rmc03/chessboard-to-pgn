@@ -1,17 +1,19 @@
-// The board: an 8x8 diagram drawn as a printed page would, in the colours of the current ink.
+// The board: an 8x8 diagram laid in the stone of the setting, as a stone table of a plaza would be.
 //
-// Everything that is not interactive (squares, hatching, rule, coordinates, pieces, marks) is painted by one
-// [CustomPainter], so the board is crisp at any size (about 120 dp for a thumbnail up to 560 dp and more) and
-// cheap to repaint. Taps and accessibility go through a transparent layer of 64 targets on top of it.
+// Everything that is not interactive (frame, squares, speckle, hatching, rule, coordinates, pieces, marks) is
+// painted by one [CustomPainter], so the board is crisp at any size (about 120 dp for a thumbnail up to 560 dp
+// and more) and cheap to repaint. Taps and accessibility go through a transparent layer of 64 targets on top.
 //
 // Layout. The widget is a square of side S. With coordinates on, the files (a-h) go in a strip under the board
 // and the ranks (1-8) in a strip at its left ([BoardLayout.gutter]), so letters and numbers never touch a
-// piece; the board itself is the remaining square. The 1 dp `outline` rule frames the board only.
+// piece. The rest is the framed board: a frame of 3-6 dp ([BoardLayout.frame], the polished granite of the
+// `stone` style, plain margin in the other styles) around the 8x8 squares ([BoardLayout.boardRect]).
 //
 // Square indices are the ones of Diagram (0 = a8 ... 63 = h1, always from White's side). `blackAtBottom`
 // only changes where a square is drawn (via [flipSquare]); callbacks keep reporting Diagram indices.
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show listEquals, visibleForTesting;
 import 'package:flutter/services.dart';
@@ -34,77 +36,75 @@ const String samplePlacement =
 /// [samplePlacement] as a grid (White's side).
 List<int> sampleGrid() => placementToGrid(samplePlacement);
 
-final Map<(String, Brightness), Color> _inkPrimaries = {};
-
-/// The `primary` role of [ink] in [brightness], computed as the theme does (fidelity scheme of the seed). It is
-/// the colour the masthead and numerals print in, and it is cached per ink.
-Color inkPrimary(SpotInk ink, Brightness brightness) =>
-    _inkPrimaries.putIfAbsent(
-      (ink.id, brightness),
-      () => ColorScheme.fromSeed(
-        seedColor: ink.seed,
-        brightness: brightness,
-        dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
-      ).primary,
-    );
-
-/// The deep tone of [ink] (its light-theme `primary`), the same in both themes. The selected square is drawn
-/// with it so the ring keeps 3:1 or more against both square colours even when the dark theme's `primary` is
-/// pale.
-///
-/// If that primary keeps less than 3.2:1 against either square of the ink (madera's does, 2.75:1 on its dark
-/// square), it is darkened toward black in 4 % steps until it does.
-Color inkDeepTone(SpotInk ink) => _deepTones.putIfAbsent(ink.id, () {
-  var c = inkPrimary(ink, Brightness.light);
-  for (var i = 0; i < 20; i++) {
-    if (contrastRatio(c, ink.lightSquare) >= 3.2 &&
-        contrastRatio(c, ink.darkSquare) >= 3.2) {
+/// The colour of the selection ring on [stone]: park-bench green, the same in both themes (the board is the
+/// constant of the design), darkened toward black in 4 % steps until it keeps 3.2:1 or more against both
+/// squares of the stone, so the ring reads on the light and on the dark square.
+Color selectionTone(Stone stone) => _selectionTones.putIfAbsent(stone.id, () {
+  var c = BoardMarks.selection;
+  for (var i = 0; i < 24; i++) {
+    if (contrastRatio(c, stone.lightSquare) >= 3.2 &&
+        contrastRatio(c, stone.darkSquare) >= 3.2) {
       break;
     }
     c = Color.lerp(c, const Color(0xFF000000), 0.04)!;
   }
-  return c;
+  // on the 8-bit grid, so what is painted equals what is asked for
+  int byte(double v) => (v * 255).round();
+  return Color.fromARGB(255, byte(c.r), byte(c.g), byte(c.b));
 });
 
-final Map<String, Color> _deepTones = {};
+final Map<String, Color> _selectionTones = {};
 
 /// Counts calls of the board painters' `paint` (tests check that unrelated rebuilds do not repaint).
 @visibleForTesting
 int boardPaintCount = 0;
 
 /// Where the parts of a board of side [side] are. Use it to overlay something exactly on the squares (for
-/// instance the original crop in the "Original" comparator).
+/// instance the original crop in the "Original" comparator: [boardRect]).
 class BoardLayout {
-  BoardLayout(this.side, {required bool coordinates})
-    : gutter = coordinates && side >= minSideForCoordinates
-          ? (side * 0.045).clamp(14.0, 20.0)
-          : 0,
-      board =
-          side -
-          (coordinates && side >= minSideForCoordinates
-              ? (side * 0.045).clamp(14.0, 20.0)
-              : 0);
+  factory BoardLayout(double side, {required bool coordinates}) {
+    final gutter = coordinates && side >= minSideForCoordinates
+        ? (side * 0.045).clamp(14.0, 20.0)
+        : 0.0;
+    final framed = side - gutter;
+    final frame = frameWidthFor(framed);
+    return BoardLayout._(side, gutter, frame, framed - 2 * frame);
+  }
+
+  const BoardLayout._(this.side, this.gutter, this.frame, this.board);
 
   /// Below this side the coordinates are left out automatically (they would not be legible).
   static const double minSideForCoordinates = 168;
+
+  /// Width of the frame of a framed board of side [framed]: 3 to 6 dp, scaled with the board.
+  static double frameWidthFor(double framed) =>
+      (framed * 0.018).clamp(3.0, 6.0);
 
   final double side;
 
   /// Width of the strip with the ranks and height of the strip with the files; 0 without coordinates.
   final double gutter;
 
+  /// Width of the frame around the squares (3-6 dp). Painted as granite in the `stone` style and left as plain
+  /// margin in the others, so the squares never move when the style changes.
+  final double frame;
+
   /// Side of the 8x8 squares.
   final double board;
 
   double get cell => board / 8;
 
-  /// The 8x8 squares inside the widget.
-  Rect get boardRect => Rect.fromLTWH(gutter, 0, board, board);
+  /// The framed board (frame included), inside the widget without the coordinate strips.
+  Rect get frameRect =>
+      Rect.fromLTWH(gutter, 0, board + 2 * frame, board + 2 * frame);
+
+  /// The 8x8 squares inside the widget (inside the frame).
+  Rect get boardRect => Rect.fromLTWH(gutter + frame, frame, board, board);
 
   /// The square drawn at screen position [index] (0..63, row-major from the top-left).
   Rect cellRect(int index) => Rect.fromLTWH(
-    gutter + (index % 8) * cell,
-    (index ~/ 8) * cell,
+    gutter + frame + (index % 8) * cell,
+    frame + (index ~/ 8) * cell,
     cell,
     cell,
   );
@@ -129,7 +129,7 @@ class BoardView extends StatefulWidget {
     this.showDoubts = true,
     this.style,
     this.showCoordinates,
-    this.ink,
+    this.stone,
     this.pieceSetId,
     this.catalog,
     this.size,
@@ -151,7 +151,7 @@ class BoardView extends StatefulWidget {
     this.showDoubts = true,
     this.style,
     this.showCoordinates,
-    this.ink,
+    this.stone,
     this.pieceSetId,
     this.catalog,
     this.size,
@@ -167,7 +167,7 @@ class BoardView extends StatefulWidget {
     this.blackAtBottom = false,
     this.style,
     this.showCoordinates = false,
-    this.ink,
+    this.stone,
     this.pieceSetId,
     this.catalog,
     this.size,
@@ -194,13 +194,14 @@ class BoardView extends StatefulWidget {
   /// A square was tapped (Diagram index). Without it the board is not interactive.
   final void Function(int square)? onTap;
 
-  /// The square being edited (Diagram index): wash and 3 dp ring in the ink's deep tone (see [inkDeepTone]).
+  /// The square being edited (Diagram index): wash and 3 dp green ring (see [selectionTone]) with a white
+  /// outer hairline.
   final int? selected;
 
   /// Draw the board from Black's side (a1 at the top right).
   final bool blackAtBottom;
 
-  /// Draw the doubtful marks (amber triangle and 2 dp rule).
+  /// Draw the doubtful marks (amber 2 dp ring with a dark hairline and a folded-corner triangle).
   final bool showDoubts;
 
   /// Overrides the board style of the settings.
@@ -209,8 +210,8 @@ class BoardView extends StatefulWidget {
   /// Overrides the coordinates setting.
   final bool? showCoordinates;
 
-  /// Draw with this ink instead of the one of the theme (the gallery shows all six).
-  final SpotInk? ink;
+  /// Draw with this stone instead of the one of the theme (the gallery shows all five).
+  final Stone? stone;
 
   /// Overrides the piece set of the settings.
   final String? pieceSetId;
@@ -290,7 +291,8 @@ class _BoardViewState extends State<BoardView> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final app = AppTheme.of(context);
-    final style = widget.style ?? scope?.settings.boardStyle ?? BoardStyle.flat;
+    final style =
+        widget.style ?? scope?.settings.boardStyle ?? BoardStyle.stone;
     final wantCoordinates =
         widget.showCoordinates ?? scope?.settings.showCoordinates ?? true;
     _catalog = widget.catalog ?? scope?.catalog ?? _builtIn;
@@ -335,12 +337,15 @@ class _BoardViewState extends State<BoardView> {
                   : null,
               blackAtBottom: widget.blackAtBottom,
               style: style,
-              light: widget.ink?.lightSquare ?? app.boardLight,
-              dark: widget.ink?.darkSquare ?? app.boardDark,
-              hatch: widget.ink?.seed ?? app.boardHatch,
+              light: widget.stone?.lightSquare ?? app.boardLight,
+              dark: widget.stone?.darkSquare ?? app.boardDark,
+              hatch: app.boardHatch,
               paper: app.boardPaper,
+              frameColor: app.stoneFrame,
               rule: scheme.outline,
-              deepTone: inkDeepTone(widget.ink ?? app.ink),
+              tone: selectionTone(widget.stone ?? app.stone),
+              mark: app.warningMark,
+              glow: app.lampGlow,
               labelStyle: labelStyle,
               showCoordinates: layout.gutter > 0,
               catalog: _catalog,
@@ -430,6 +435,87 @@ class _BoardViewState extends State<BoardView> {
   }
 }
 
+// ------------------------------------------------------------------------------------------------ texture
+
+/// Small polygons (the chips of terrazzo or the grains of granite) scattered over a [side] x [side] square,
+/// recorded once as a [ui.Picture]. Deterministic: the same seed and size always give the same stone, so the
+/// board never shimmers between frames or between theme changes.
+ui.Picture _chipPicture({
+  required double side,
+  required List<(Color, double)> tones,
+  required List<double> radii,
+  required double unit,
+  required int count,
+  required int seed,
+  Rect? hole,
+}) {
+  final rnd = math.Random(seed);
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, side, side));
+  var placed = 0, tries = 0;
+  while (placed < count && tries < count * 20) {
+    tries++;
+    final cx = rnd.nextDouble() * side, cy = rnd.nextDouble() * side;
+    // draw the random numbers of a chip whether it is kept or not, so a hole never changes the others
+    final r =
+        radii[rnd.nextInt(radii.length)] *
+        (0.8 + rnd.nextDouble() * 0.4) *
+        unit;
+    final sides = const [4, 5, 5, 6][rnd.nextInt(4)];
+    final a0 = rnd.nextDouble() * math.pi * 2;
+    final tone = tones[rnd.nextInt(tones.length)];
+    final jitter = List<double>.generate(sides, (_) => rnd.nextDouble());
+    final rj = List<double>.generate(sides, (_) => rnd.nextDouble());
+    if (hole != null && hole.inflate(r).contains(Offset(cx, cy))) continue;
+    placed++;
+    final path = Path();
+    for (var k = 0; k < sides; k++) {
+      final a = a0 + k * math.pi * 2 / sides + (jitter[k] - 0.5) * 0.7;
+      final rr = r * (0.65 + rj[k] * 0.5);
+      final pt = Offset(cx + rr * math.cos(a), cy + rr * math.sin(a));
+      k == 0 ? path.moveTo(pt.dx, pt.dy) : path.lineTo(pt.dx, pt.dy);
+    }
+    path.close();
+    canvas.drawPath(
+      path,
+      Paint()..color = tone.$1.withValues(alpha: tone.$2 * 0.8),
+    );
+  }
+  return recorder.endRecording();
+}
+
+final Map<String, ui.Picture> _pictureCache = {};
+
+ui.Picture _cached(String key, ui.Picture Function() make) {
+  if (_pictureCache.length > 24) _pictureCache.clear();
+  return _pictureCache.putIfAbsent(key, make);
+}
+
+/// The terrazzo of the squares: about 230 chips per 300 dp, drawn over light and dark squares alike (dark chips
+/// show on the light squares, pale ones on the dark squares). Cached per board size.
+void paintTerrazzo(Canvas canvas, Rect board) {
+  final side = board.width;
+  if (side <= 0) return;
+  final unit = math.max(side / 300, 0.55);
+  final count = (230 * math.pow(side / (300 * unit), 2)).round().clamp(8, 700);
+  final picture = _cached(
+    'terrazzo/${(side * 2).round()}',
+    () => _chipPicture(
+      side: side,
+      tones: BoardTexture.terrazzo,
+      radii: const [0.7, 0.9, 1.1, 1.3, 1.6, 2.0, 2.6],
+      unit: unit,
+      count: count,
+      seed: 7,
+    ),
+  );
+  canvas.save();
+  canvas.clipRect(board);
+  canvas.translate(board.left, board.top);
+  canvas.drawPicture(picture);
+  canvas.restore();
+}
+
 // ------------------------------------------------------------------------------------------------ paint
 
 class _BoardPainter extends CustomPainter {
@@ -446,8 +532,11 @@ class _BoardPainter extends CustomPainter {
     required this.dark,
     required this.hatch,
     required this.paper,
+    required this.frameColor,
     required this.rule,
-    required this.deepTone,
+    required this.tone,
+    required this.mark,
+    required this.glow,
     required this.labelStyle,
     required this.showCoordinates,
     required this.catalog,
@@ -458,9 +547,9 @@ class _BoardPainter extends CustomPainter {
   final List<int> grid;
   final List<bool> doubts;
   final int? selected, pressed, cursor;
-  final bool blackAtBottom, showCoordinates;
+  final bool blackAtBottom, showCoordinates, glow;
   final BoardStyle style;
-  final Color light, dark, hatch, paper, rule, deepTone;
+  final Color light, dark, hatch, paper, frameColor, rule, tone, mark;
   final TextStyle labelStyle;
   final PieceSetCatalog catalog;
   final String setId;
@@ -473,7 +562,17 @@ class _BoardPainter extends CustomPainter {
     final board = layout.boardRect;
     final cell = layout.cell;
 
-    _paintSquares(canvas, board, cell);
+    if (style == BoardStyle.stone) _paintFrame(canvas);
+    paintBoardSquares(
+      canvas,
+      board,
+      8,
+      style: style,
+      light: light,
+      dark: dark,
+      hatch: hatch,
+      paper: paper,
+    );
     if (showCoordinates) _paintCoordinates(canvas, cell);
 
     // state layers under the pieces
@@ -488,19 +587,44 @@ class _BoardPainter extends CustomPainter {
       if (sq == selected) {
         canvas.drawRect(
           layout.cellRect(i),
-          Paint()..color = deepTone.withValues(alpha: 0.2),
+          Paint()..color = tone.withValues(alpha: 0.2),
+        );
+      }
+      if (doubts[sq]) {
+        canvas.drawRect(
+          layout.cellRect(i),
+          Paint()..color = mark.withValues(alpha: glow ? 0.34 : 0.30),
         );
       }
     }
 
-    // the 1 dp rule of the printed page
-    canvas.drawRect(
-      board.deflate(0.5),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = rule,
-    );
+    // the rule around the squares: a hairline in the frame, 1 dp in `outline` (flat) or black (printed)
+    switch (style) {
+      case BoardStyle.stone:
+        canvas.drawRect(
+          board.inflate(0.5),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1
+            ..color = BoardTexture.hairline,
+        );
+      case BoardStyle.flat:
+        canvas.drawRect(
+          board.deflate(0.5),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1
+            ..color = rule,
+        );
+      case BoardStyle.printed:
+        canvas.drawRect(
+          board.deflate(0.75),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..color = hatch,
+        );
+    }
 
     for (var i = 0; i < 64; i++) {
       final cls = grid[_squareAt(i)];
@@ -519,17 +643,76 @@ class _BoardPainter extends CustomPainter {
     }
   }
 
-  void _paintSquares(Canvas canvas, Rect board, double cell) =>
-      paintBoardSquares(
-        canvas,
-        board,
-        8,
-        style: style,
-        light: light,
-        dark: dark,
-        hatch: hatch,
-        paper: paper,
-      );
+  /// Polished granite: a 135 degree gradient, fine grains, a light top-left edge and a shaded bottom-right edge.
+  void _paintFrame(Canvas canvas) {
+    final outer = layout.frameRect;
+    final rrect = RRect.fromRectAndRadius(outer, const Radius.circular(3));
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          outer.topLeft,
+          outer.bottomRight,
+          [
+            Color.lerp(frameColor, BoardMarks.pieceWhite, 0.22)!,
+            frameColor,
+            Color.lerp(frameColor, BoardMarks.pieceBlack, 0.25)!,
+          ],
+          const [0, 0.4, 1],
+        ),
+    );
+    final band = Path.combine(
+      PathOperation.difference,
+      Path()..addRRect(rrect),
+      Path()..addRect(layout.boardRect),
+    );
+    final side = outer.width;
+    final grains = _cached(
+      'granite/${(side * 2).round()}/${(layout.frame * 2).round()}',
+      () => _chipPicture(
+        side: side,
+        tones: BoardTexture.granite,
+        radii: const [0.4, 0.55, 0.7, 0.9],
+        unit: 1,
+        count: (4 * side * layout.frame / 40).round(),
+        seed: 11,
+        hole: layout.boardRect.shift(-outer.topLeft),
+      ),
+    );
+    canvas.save();
+    canvas.clipPath(band);
+    canvas.translate(outer.left, outer.top);
+    canvas.drawPicture(grains);
+    canvas.restore();
+    // bevel
+    Paint edge(Color c) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.round
+      ..color = c;
+    final lit = edge(BoardTexture.bevelLight),
+        shade = edge(BoardTexture.bevelShade);
+    canvas.drawLine(
+      Offset(outer.left + 3, outer.top + 0.5),
+      Offset(outer.right - 3, outer.top + 0.5),
+      lit,
+    );
+    canvas.drawLine(
+      Offset(outer.left + 0.5, outer.top + 3),
+      Offset(outer.left + 0.5, outer.bottom - 3),
+      lit,
+    );
+    canvas.drawLine(
+      Offset(outer.left + 3, outer.bottom - 0.5),
+      Offset(outer.right - 3, outer.bottom - 0.5),
+      shade,
+    );
+    canvas.drawLine(
+      Offset(outer.right - 0.5, outer.top + 3),
+      Offset(outer.right - 0.5, outer.bottom - 3),
+      shade,
+    );
+  }
 
   void _paintCoordinates(Canvas canvas, double cell) {
     TextPainter label(String text) => TextPainter(
@@ -538,13 +721,14 @@ class _BoardPainter extends CustomPainter {
       textScaler: TextScaler.noScaling,
     )..layout();
     final g = layout.gutter;
+    final bottom = layout.frameRect.bottom;
     for (var c = 0; c < 8; c++) {
       final tp = label('abcdefgh'[blackAtBottom ? 7 - c : c]);
       tp.paint(
         canvas,
         Offset(
-          g + (c + 0.5) * cell - tp.width / 2,
-          layout.board + (g - tp.height) / 2,
+          layout.boardRect.left + (c + 0.5) * cell - tp.width / 2,
+          bottom + (g - tp.height) / 2,
         ),
       );
     }
@@ -552,13 +736,17 @@ class _BoardPainter extends CustomPainter {
       final tp = label('${blackAtBottom ? r + 1 : 8 - r}');
       tp.paint(
         canvas,
-        Offset((g - tp.width) / 2, (r + 0.5) * cell - tp.height / 2),
+        Offset(
+          (g - tp.width) / 2,
+          layout.boardRect.top + (r + 0.5) * cell - tp.height / 2,
+        ),
       );
     }
   }
 
-  /// Amber triangle in the top right corner plus a 2 dp amber rule, each edged with a hairline so it reads on
-  /// light, mid-tone and hatched squares alike (and the mark is a shape, not only a colour).
+  /// A lamp-amber ring of 2 dp inside a dark hairline, plus a folded-corner triangle in the top right: the mark
+  /// is a shape, not only a colour, and the hairline keeps it readable on light, mid-tone and hatched squares
+  /// alike. In the dark theme a faint halo of lamp light spills outside the square.
   /// When [ringed] (the square is also selected) the selection ring owns the edge: only the triangle is drawn,
   /// inside the ring.
   void _paintDoubt(
@@ -568,19 +756,20 @@ class _BoardPainter extends CustomPainter {
     bool ringed = false,
   }) {
     final thin = cell < 24;
-    var rule = thin ? 1.0 : 2.0;
+    var width = thin ? 1.0 : 2.0;
+    if (glow && !ringed) _paintGlow(canvas, rect, cell);
     if (ringed) {
-      rule = _selectedWidth(cell) + 2;
+      width = _selectedWidth(cell) + 2;
     } else {
       canvas.drawRect(
-        rect.deflate(rule / 2),
+        rect.deflate(width / 2),
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = rule
-          ..color = BoardMarks.doubt,
+          ..strokeWidth = width
+          ..color = mark,
       );
       canvas.drawRect(
-        rect.deflate(rule + 0.5),
+        rect.deflate(width + 0.5),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1
@@ -589,11 +778,11 @@ class _BoardPainter extends CustomPainter {
     }
     final t = math.max(cell * 0.36, 7.0).clamp(7.0, 22.0);
     final tri = Path()
-      ..moveTo(rect.right - t, rect.top + rule)
-      ..lineTo(rect.right - rule, rect.top + rule)
-      ..lineTo(rect.right - rule, rect.top + t)
+      ..moveTo(rect.right - t, rect.top + width)
+      ..lineTo(rect.right - width, rect.top + width)
+      ..lineTo(rect.right - width, rect.top + t)
       ..close();
-    canvas.drawPath(tri, Paint()..color = BoardMarks.doubt);
+    canvas.drawPath(tri, Paint()..color = mark);
     canvas.drawPath(
       tri,
       Paint()
@@ -604,10 +793,29 @@ class _BoardPainter extends CustomPainter {
     );
   }
 
+  void _paintGlow(Canvas canvas, Rect rect, double cell) {
+    final outside = Path.combine(
+      PathOperation.difference,
+      Path()..addRect(rect.inflate(cell * 0.5)),
+      Path()..addRect(rect),
+    );
+    canvas.save();
+    canvas.clipPath(outside);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, cell * 0.09)
+        ..color = mark.withValues(alpha: 0.6),
+    );
+    canvas.restore();
+  }
+
   double _selectedWidth(double cell) => cell < 24 ? 2.0 : 3.0;
 
-  /// 3 dp ring in the deep tone of the ink under a 1 dp white outer hairline: the same in both themes, so it
-  /// keeps 3:1 against the light and the dark squares (the dark theme's `primary` is pale).
+  /// 3 dp ring in park-bench green (darkened per stone, see [selectionTone]) under a 1 dp white outer
+  /// hairline: the same in both themes, so it keeps 3:1 against the light and the dark squares.
   void _paintSelected(Canvas canvas, Rect rect, double cell) {
     final w = _selectedWidth(cell);
     canvas.drawRect(
@@ -622,7 +830,7 @@ class _BoardPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = w
-        ..color = deepTone,
+        ..color = tone,
     );
   }
 
@@ -660,8 +868,11 @@ class _BoardPainter extends CustomPainter {
       dark != old.dark ||
       hatch != old.hatch ||
       paper != old.paper ||
+      frameColor != old.frameColor ||
       rule != old.rule ||
-      deepTone != old.deepTone ||
+      tone != old.tone ||
+      mark != old.mark ||
+      glow != old.glow ||
       labelStyle != old.labelStyle ||
       !identical(catalog, old.catalog) ||
       setId != old.setId ||
@@ -669,8 +880,8 @@ class _BoardPainter extends CustomPainter {
       !listEquals(doubts, old.doubts);
 }
 
-/// Paints a [cells] x [cells] chequered area in [board]: flat squares, or white paper with the dark squares
-/// hatched in the ink. a1 (bottom left) is dark.
+/// Paints a [cells] x [cells] chequered area in [board]: flat squares (with the terrazzo speckle in the `stone`
+/// style), or white paper with the dark squares hatched in black. a1 (bottom left) is dark.
 void paintBoardSquares(
   Canvas canvas,
   Rect board,
@@ -684,7 +895,7 @@ void paintBoardSquares(
   final cell = board.width / cells;
   Rect at(int r, int c) =>
       Rect.fromLTWH(board.left + c * cell, board.top + r * cell, cell, cell);
-  if (style == BoardStyle.flat) {
+  if (style != BoardStyle.printed) {
     canvas.drawRect(board, Paint()..color = light);
     final darkPaint = Paint()..color = dark;
     for (var r = 0; r < cells; r++) {
@@ -692,9 +903,10 @@ void paintBoardSquares(
         if ((r + c).isOdd) canvas.drawRect(at(r, c), darkPaint);
       }
     }
+    if (style == BoardStyle.stone) paintTerrazzo(canvas, board);
     return;
   }
-  // printed: white paper, dark squares hatched in the ink
+  // printed: white paper, dark squares hatched in black
   canvas.drawRect(board, Paint()..color = paper);
   final darkSquares = Path();
   for (var r = 0; r < cells; r++) {
@@ -732,7 +944,67 @@ void paintBoardSquares(
   canvas.restore();
 }
 
-/// Four squares with a white and a black knight and king of piece set [setId], in the board style and ink
+/// A [size] square of the board in [stone] (2 x 2 squares, with the terrazzo speckle) with its 1 dp rule: the
+/// swatch of a stone in Ajustes. Static; hidden from semantics (the label is next to it).
+class StoneSample extends StatelessWidget {
+  const StoneSample({super.key, required this.stone, required this.size});
+
+  final Stone stone;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ExcludeSemantics(
+      child: SizedBox.square(
+        dimension: size,
+        child: RepaintBoundary(
+          child: CustomPaint(
+            painter: _StoneSamplePainter(
+              stone.lightSquare,
+              stone.darkSquare,
+              scheme.outline,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StoneSamplePainter extends CustomPainter {
+  const _StoneSamplePainter(this.light, this.dark, this.rule);
+
+  final Color light, dark, rule;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final board = Offset.zero & size;
+    paintBoardSquares(
+      canvas,
+      board,
+      2,
+      style: BoardStyle.stone,
+      light: light,
+      dark: dark,
+      hatch: BoardMarks.pieceBlack,
+      paper: BoardMarks.paper,
+    );
+    canvas.drawRect(
+      board.deflate(0.5),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = rule,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_StoneSamplePainter old) =>
+      light != old.light || dark != old.dark || rule != old.rule;
+}
+
+/// Four squares with a white and a black knight and king of piece set [setId], in the board style and stone
 /// of the settings: the thumbnail of a piece set in Ajustes. Static; one semantics node with [semanticLabel].
 class SetPreview extends StatefulWidget {
   const SetPreview({
@@ -740,7 +1012,7 @@ class SetPreview extends StatefulWidget {
     required this.setId,
     required this.size,
     this.style,
-    this.ink,
+    this.stone,
     this.catalog,
     this.semanticLabel,
   });
@@ -748,7 +1020,7 @@ class SetPreview extends StatefulWidget {
   final String setId;
   final double size;
   final BoardStyle? style;
-  final SpotInk? ink;
+  final Stone? stone;
   final PieceSetCatalog? catalog;
   final String? semanticLabel;
 
@@ -781,10 +1053,10 @@ class _SetPreviewState extends State<SetPreview> {
     final painter = _SetPreviewPainter(
       catalog: _catalog,
       setId: widget.setId,
-      style: widget.style ?? scope?.settings.boardStyle ?? BoardStyle.flat,
-      light: widget.ink?.lightSquare ?? app.boardLight,
-      dark: widget.ink?.darkSquare ?? app.boardDark,
-      hatch: widget.ink?.seed ?? app.boardHatch,
+      style: widget.style ?? scope?.settings.boardStyle ?? BoardStyle.stone,
+      light: widget.stone?.lightSquare ?? app.boardLight,
+      dark: widget.stone?.darkSquare ?? app.boardDark,
+      hatch: app.boardHatch,
       paper: app.boardPaper,
       rule: scheme.outline,
     );
@@ -842,7 +1114,7 @@ class _SetPreviewPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1
-        ..color = rule,
+        ..color = style == BoardStyle.printed ? hatch : rule,
     );
     final cell = size.width / 2;
     for (var i = 0; i < 4; i++) {
@@ -868,10 +1140,10 @@ class _SetPreviewPainter extends CustomPainter {
       rule != old.rule;
 }
 
-/// One piece on a square of the ink, framed by the 1 dp rule (3 dp `primary` when [selected]). Use it wherever
-/// a piece is shown outside a board (the square editor sheet, pickers): black pieces are invisible on a dark
-/// tonal surface, so a piece always sits on a board square. [size] is the side of the tile; it is also at least
-/// a 48 dp target when you wrap it in an InkWell of that size.
+/// One piece on a square of the stone, framed by the 1 dp rule (3 dp `primary` when [selected]). Use it
+/// wherever a piece is shown outside a board (the square editor sheet, pickers): black pieces are invisible on a
+/// dark tonal surface, so a piece always sits on a board square. [size] is the side of the tile; it is also at
+/// least a 48 dp target when you wrap it in an InkWell of that size.
 class PieceTile extends StatelessWidget {
   const PieceTile(
     this.cls, {
@@ -888,7 +1160,7 @@ class PieceTile extends StatelessWidget {
   final double size;
   final bool selected;
 
-  /// Use the dark square of the ink instead of the light one.
+  /// Use the dark square of the stone instead of the light one.
   final bool dark;
   final PieceSetCatalog? catalog;
   final String? setId;

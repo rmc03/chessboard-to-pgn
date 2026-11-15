@@ -1,11 +1,13 @@
 // Home / session screen (docs/ux-spec.md, 4.1): the first-run composition, then the captures read so far as
-// groups of diagram blocks, with the extended FAB "Añadir captura" and the export bar.
+// groups of diagram blocks, with the "Añadir captura" FAB, the export bar and, at the end of the list, "Quitar
+// todas las capturas". No overflow menus anywhere: every action is a visible button.
 //
 //   < 600 dp   one column            >= 840 dp   two columns (and the FAB docks in the export bar)
 //   >= 1240 dp three columns         blocks never grow past [blockMaxWidth]
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -14,10 +16,12 @@ import '../diagram.dart';
 import '../export.dart' as exporter;
 import '../session.dart';
 import 'board.dart';
+import 'capture_thumb.dart';
 import 'diagram_block.dart';
 import 'equal_row.dart';
 import 'export_bar.dart';
 import 'home_actions.dart';
+import 'icons.dart';
 import 'scope.dart';
 import 'settings_page.dart';
 import 'theme.dart';
@@ -36,6 +40,7 @@ class HomePage extends StatefulWidget {
     this.openUri,
     this.canShare,
     this.now,
+    this.platform,
   });
 
   /// The image picker (the gallery by default).
@@ -56,34 +61,54 @@ class HomePage extends StatefulWidget {
 
   final DateTime Function()? now;
 
+  /// The platform the wording follows ("Elige la imagen de tu galería" on Android); [defaultTargetPlatform] by
+  /// default.
+  final TargetPlatform? platform;
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
   final ScrollController _scroll = ScrollController();
+  final ValueNotifier<bool> _scrolled = ValueNotifier(false);
   final Map<int, GlobalKey> _headerKeys = {};
+  final Map<Diagram, GlobalKey<DiagramBlockState>> _blockKeys = {};
+  final GlobalKey _fabKey = GlobalKey();
+  double _fabHeight = 56;
   HomeActions? _actions;
 
   HomeActions get actions => _actions!;
   Session get session => actions.session;
 
   @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      final away = _scroll.hasClients && _scroll.offset > 8;
+      if (away != _scrolled.value) _scrolled.value = away;
+    });
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_actions == null) {
       final scope = AppScope.of(context);
-      _actions = HomeActions(
-        session: scope.session,
-        pickImage: widget.pickImage,
-        cropRegion: widget.cropRegion,
-        saveFile: widget.saveFile,
-        shareText: widget.shareText,
-        shareFile: widget.shareFile,
-        openUri: widget.openUri,
-        canShare: widget.canShare,
-        now: widget.now,
-      )..onCaptureAdded = _reveal;
+      _actions =
+          HomeActions(
+              session: scope.session,
+              pickImage: widget.pickImage,
+              cropRegion: widget.cropRegion,
+              saveFile: widget.saveFile,
+              shareText: widget.shareText,
+              shareFile: widget.shareFile,
+              openUri: widget.openUri,
+              canShare: widget.canShare,
+              now: widget.now,
+            )
+            ..onCaptureAdded = _reveal
+            ..onRevealDiagram = _revealDiagram;
     }
   }
 
@@ -91,11 +116,15 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _actions?.dispose();
     _scroll.dispose();
+    _scrolled.dispose();
     super.dispose();
   }
 
   GlobalKey _headerKey(SourceImage s) =>
       _headerKeys.putIfAbsent(s.id, GlobalKey.new);
+
+  GlobalKey<DiagramBlockState> _blockKey(Diagram d) =>
+      _blockKeys.putIfAbsent(d, GlobalKey<DiagramBlockState>.new);
 
   /// Scrolls the list to the group of a capture that was just added.
   void _reveal(SourceImage source, {int attempt = 0}) {
@@ -119,56 +148,82 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _confirmClear() async {
-    final diagrams = session.diagramCount;
-    final captures = session.sources.length;
-    final ok = await _confirm(
-      title: '¿Vaciar la sesión?',
-      body:
-          'Se quitarán ${captures == 1 ? 'la captura' : 'las $captures capturas'} '
-          'y ${diagrams == 1 ? 'su diagrama' : 'sus $diagrams diagramas'}. No se puede deshacer.',
-      action: 'Vaciar sesión',
-    );
-    if (ok) session.clear();
-  }
-
-  Future<void> _removeSource(SourceImage source) async {
-    if (source.diagrams.isNotEmpty) {
-      final n = source.diagrams.length;
-      final ok = await _confirm(
-        title: '¿Quitar la ${source.title.toLowerCase()}?',
-        body:
-            'Se quitará${n == 1 ? ' su diagrama' : 'n sus $n diagramas'}. No se puede deshacer.',
-        action: 'Quitar captura',
+  /// Scrolls to the block of [diagram], however far it is (the list is lazy: blocks off screen are not built, so
+  /// it walks towards the block until it exists), and opens its review when asked.
+  Future<void> _revealDiagram(Diagram diagram, {bool review = false}) async {
+    final key = _blockKey(diagram);
+    for (var attempt = 0; attempt < 60; attempt++) {
+      if (!mounted) return;
+      if (!_scroll.hasClients) return;
+      final ctx = key.currentContext;
+      if (ctx != null && ctx.mounted) {
+        await Scrollable.ensureVisible(
+          ctx,
+          alignment: 0,
+          duration: Motion.of(context, Motion.slow),
+          curve: Motion.standard,
+        );
+        break;
+      }
+      final target = session.numberOf(diagram);
+      final built = [
+        for (final e in _blockKeys.entries)
+          if (e.value.currentContext != null) session.numberOf(e.key),
+      ];
+      final forward = built.isEmpty || target > built.reduce(math.max);
+      final position = _scroll.position;
+      final step = position.viewportDimension * 0.7;
+      final to = (position.pixels + (forward ? step : -step)).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
       );
-      if (!ok) return;
+      if (to == position.pixels) return;
+      _scroll.jumpTo(to);
+      WidgetsBinding.instance.scheduleFrame();
+      await WidgetsBinding.instance.endOfFrame;
     }
-    session.removeSource(source);
+    if (review && mounted) await _blockKeys[diagram]?.currentState?.review();
   }
 
-  Future<bool> _confirm({
-    required String title,
-    required String body,
-    required String action,
-  }) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(action),
-          ),
-        ],
-      ),
+  /// The count of diagrams with warnings in the export bar: the first of them, with its review when it has
+  /// doubtful squares.
+  void _onWarnings(Diagram first) =>
+      unawaited(_revealDiagram(first, review: first.hasDoubts));
+
+  void _removeSource(SourceImage source) {
+    final messenger = ScaffoldMessenger.of(context);
+    final title = source.title;
+    final removed = session.removeSource(source);
+    if (removed == null) return;
+    actions.toast(
+      messenger,
+      '$title quitada',
+      action: removed.restorable ? 'Deshacer' : null,
+      onAction: () => session.restoreSource(removed),
+      duration: const Duration(seconds: 6),
     );
-    return ok ?? false;
+  }
+
+  void _clearAll() {
+    final messenger = ScaffoldMessenger.of(context);
+    final cleared = session.clear();
+    if (cleared == null) return;
+    actions.toast(
+      messenger,
+      'Sesión vaciada',
+      action: cleared.isEmpty ? null : 'Deshacer',
+      onAction: () => session.restoreCleared(cleared),
+      duration: const Duration(seconds: 6),
+    );
+  }
+
+  /// Keeps the list's bottom padding equal to the real FAB.
+  void _measureFab() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final h = _fabKey.currentContext?.size?.height;
+      if (h != null && h != _fabHeight) setState(() => _fabHeight = h);
+    });
   }
 
   @override
@@ -178,6 +233,9 @@ class _HomePageState extends State<HomePage> {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyO, control: true): () =>
             unawaited(actions.pick(context)),
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
+          if (session.diagramCount > 0) unawaited(actions.saveAll(context));
+        },
       },
       child: Focus(
         autofocus: true,
@@ -188,53 +246,36 @@ class _HomePageState extends State<HomePage> {
             final wide = width >= Breakpoint.expanded;
             final empty = session.isEmpty;
             final hasBar = session.diagramCount > 0;
-            final fab = empty
-                ? null
-                : FloatingActionButton.extended(
-                    onPressed: () => unawaited(actions.pick(context)),
-                    icon: const Icon(Icons.add_photo_alternate_outlined),
-                    label: const Text('Añadir captura'),
-                  );
+            final docked = wide && hasBar;
+            if (!empty) _measureFab();
             return Scaffold(
               backgroundColor: scheme.surface,
               appBar: AppBar(
                 title: const Text('Chess to PGN'),
                 actions: [
                   IconButton(
-                    icon: const Icon(Icons.settings_outlined),
+                    icon: const AppIcon(AppIcons.settings),
                     tooltip: 'Ajustes',
                     onPressed: () =>
                         SettingsPage.open(context, appVersion: kAppVersion),
                   ),
-                  if (session.diagramCount > 0)
-                    PopupMenuButton<String>(
-                      tooltip: 'Más opciones',
-                      onSelected: (_) => unawaited(_confirmClear()),
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(
-                          value: 'clear',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete_sweep_outlined, size: 20),
-                              SizedBox(width: Space.md),
-                              Text('Vaciar sesión'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
                 ],
               ),
               body: empty
-                  ? _EmptyState(onPick: () => unawaited(actions.pick(context)))
-                  : _list(context, floatingFab: !(wide && hasBar)),
-              floatingActionButton: wide && hasBar ? null : fab,
+                  ? _EmptyState(
+                      onPick: () => unawaited(actions.pick(context)),
+                      android:
+                          (widget.platform ?? defaultTargetPlatform) ==
+                          TargetPlatform.android,
+                    )
+                  : _list(context, floatingFab: !docked),
+              floatingActionButton: empty || docked ? null : _fab(false),
               bottomNavigationBar: hasBar
                   ? ExportBar(
-                      count: session.diagramCount,
                       actions: actions,
                       horizontalPadding: wide ? _sidePadding(width) : null,
-                      trailing: wide ? fab : null,
+                      trailing: docked ? _fab(true) : null,
+                      onWarnings: _onWarnings,
                     )
                   : null,
             );
@@ -243,6 +284,40 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
+  /// "Añadir captura": the extended FAB. On a phone it shrinks to the 56 dp icon FAB once the list has been
+  /// scrolled away from the top, or when the text size is large (the label would take half the screen).
+  Widget _fab(bool docked) => KeyedSubtree(
+    key: docked ? null : _fabKey,
+    child: ValueListenableBuilder<bool>(
+      valueListenable: _scrolled,
+      builder: (context, scrolled, _) {
+        final width = MediaQuery.sizeOf(context).width;
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        final compact =
+            width < Breakpoint.medium && (scrolled || scale >= 1.15);
+        void add() => unawaited(actions.pick(context));
+        return AnimatedSwitcher(
+          duration: Motion.of(context, Motion.fast),
+          child: compact
+              ? FloatingActionButton(
+                  key: const ValueKey('fab-compact'),
+                  heroTag: null,
+                  tooltip: 'Añadir captura',
+                  onPressed: add,
+                  child: const AppIcon(AppIcons.addCapture),
+                )
+              : FloatingActionButton.extended(
+                  key: const ValueKey('fab-extended'),
+                  heroTag: null,
+                  onPressed: add,
+                  icon: const AppIcon(AppIcons.addCapture),
+                  label: const Text('Añadir captura'),
+                ),
+        );
+      },
+    ),
+  );
 
   // ---------------------------------------------------------------- the list
 
@@ -275,34 +350,140 @@ class _HomePageState extends State<HomePage> {
           _sidePadding(width),
           math.max(padding.left, padding.right),
         );
-        // The FAB floats over the end of the list: keep the last block's actions clear of it.
-        final bottom = floatingFab ? 56.0 + 2 * Space.lg + Space.sm : Space.xl;
+        // The FAB floats over the end of the list: the padding is its real height plus the margin the Scaffold
+        // leaves under it and the same again above it, so the last block's actions stay clear of it. (The bar is
+        // not part of this: the Scaffold lays the list out above it.)
+        final bottom = floatingFab
+            ? _fabHeight + 2 * Space.lg + padding.bottom
+            : Space.xl;
         final sources = session.sources;
+        _blockKeys.removeWhere(
+          (d, _) => !sources.any((s) => s.diagrams.contains(d)),
+        );
         var before = 0;
         final groups = <Widget>[];
-        for (final (i, source) in sources.indexed) {
-          groups.add(_group(source, i == 0, before, cols));
+        for (final source in sources) {
+          groups.add(
+            _GroupHost(
+              key: ValueKey('group-${source.id}'),
+              source: source,
+              first: identical(source, sources.first),
+              before: before,
+              columns: cols,
+              actions: actions,
+              headerKey: _headerKey(source),
+              blockKey: _blockKey,
+              onRemove: _removeSource,
+            ),
+          );
           before += source.diagrams.length;
         }
         return CustomScrollView(
           controller: _scroll,
           slivers: [
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                side,
-                0,
-                side,
-                bottom + (sources.isEmpty ? 0 : 0),
+              padding: EdgeInsets.fromLTRB(side, 0, side, bottom),
+              sliver: SliverMainAxisGroup(
+                slivers: [
+                  ...groups,
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: Space.sm),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _ClearAll(onPressed: _clearAll),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              sliver: SliverMainAxisGroup(slivers: groups),
             ),
           ],
         );
       },
     );
   }
+}
 
-  Widget _group(SourceImage source, bool first, int before, int cols) {
+// ------------------------------------------------------------------------------------- clear everything
+
+/// The one quiet way to empty the session, after the last group (it used to hide in a menu of the app bar).
+class _ClearAll extends StatelessWidget {
+  const _ClearAll({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+    key: const ValueKey('clear-all'),
+    style: TextButton.styleFrom(
+      foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
+    onPressed: onPressed,
+    icon: const AppIcon(AppIcons.deleteAll),
+    label: const Text('Quitar todas las capturas'),
+  );
+}
+
+// ------------------------------------------------------------------------------------------------- group
+
+/// One capture: its header, its rows of blocks and skeletons, and its failure strip. It follows its own
+/// [SourceImage]; a change of another capture (or of a diagram in another group) does not rebuild it, because the
+/// same widget tree is handed back to the framework while the inputs are the same.
+class _GroupHost extends StatefulWidget {
+  const _GroupHost({
+    super.key,
+    required this.source,
+    required this.first,
+    required this.before,
+    required this.columns,
+    required this.actions,
+    required this.headerKey,
+    required this.blockKey,
+    required this.onRemove,
+  });
+
+  final SourceImage source;
+  final bool first;
+
+  /// Diagrams in the captures before this one (the numbers go on from there).
+  final int before;
+  final int columns;
+  final HomeActions actions;
+  final GlobalKey headerKey;
+  final GlobalKey<DiagramBlockState> Function(Diagram) blockKey;
+  final void Function(SourceImage) onRemove;
+
+  @override
+  State<_GroupHost> createState() => _GroupHostState();
+}
+
+class _GroupHostState extends State<_GroupHost> {
+  Widget? _shell;
+
+  static const double _gap = Space.lg;
+
+  @override
+  void didUpdateWidget(_GroupHost old) {
+    super.didUpdateWidget(old);
+    if (old.source != widget.source ||
+        old.first != widget.first ||
+        old.before != widget.before ||
+        old.columns != widget.columns ||
+        old.actions != widget.actions) {
+      _shell = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _shell ??= ListenableBuilder(
+    listenable: Listenable.merge([widget.source, widget.actions]),
+    builder: (context, _) => _group(),
+  );
+
+  Widget _group() {
+    final source = widget.source;
+    final cols = widget.columns;
     final diagrams = List<Diagram>.of(source.diagrams);
     final skeletons = source.status == SourceStatus.reading
         ? (source.found == null ? 1 : source.skeletons)
@@ -310,29 +491,22 @@ class _HomePageState extends State<HomePage> {
     final strip =
         source.status == SourceStatus.failed ||
         source.status == SourceStatus.noBoards;
-    final count = diagrams.length + skeletons + (strip ? 1 : 0);
+    final count = diagrams.length + skeletons;
     final rows = (count / cols).ceil();
 
     Widget item(int i) {
       if (i < diagrams.length) {
         final d = diagrams[i];
         return DiagramBlock(
-          key: ObjectKey(d),
+          key: widget.blockKey(d),
           diagram: d,
-          number: before + i + 1,
-          actions: actions,
+          number: widget.before + i + 1,
+          actions: widget.actions,
+          source: source,
         );
       }
-      if (i < diagrams.length + skeletons) {
-        return DiagramSkeleton(
-          key: ValueKey('skeleton-${source.id}-${i - diagrams.length}'),
-        );
-      }
-      return _StatusStrip(
-        key: ValueKey('strip-${source.id}'),
-        source: source,
-        actions: actions,
-        onRemove: () => _removeSource(source),
+      return DiagramSkeleton(
+        key: ValueKey('skeleton-${source.id}-${i - diagrams.length}'),
       );
     }
 
@@ -340,11 +514,11 @@ class _HomePageState extends State<HomePage> {
       slivers: [
         SliverToBoxAdapter(
           child: _CaptureHeader(
-            key: _headerKey(source),
+            key: widget.headerKey,
             source: source,
-            first: first,
-            actions: actions,
-            onRemove: () => _removeSource(source),
+            first: widget.first,
+            actions: widget.actions,
+            onRemove: () => widget.onRemove(source),
           ),
         ),
         SliverList(
@@ -363,6 +537,19 @@ class _HomePageState extends State<HomePage> {
             childCount: rows,
           ),
         ),
+        if (strip)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: _gap),
+              child: _StatusStrip(
+                key: ValueKey('strip-${source.id}'),
+                source: source,
+                actions: widget.actions,
+                onRemove: () => widget.onRemove(source),
+                wide: cols > 1,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -407,6 +594,8 @@ class _CaptureHeader extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: minTarget),
             child: Row(
               children: [
+                CaptureThumb(source: source),
+                const SizedBox(width: Space.sm),
                 Expanded(
                   child: Semantics(
                     header: true,
@@ -414,43 +603,25 @@ class _CaptureHeader extends StatelessWidget {
                       done
                           ? '${source.title} · ${source.diagramCountText}'
                           : source.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: text.titleMedium,
                     ),
                   ),
                 ),
-                PopupMenuButton<String>(
-                  tooltip: 'Opciones de ${source.title.toLowerCase()}',
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (v) {
-                    if (v == 'crop') {
-                      unawaited(actions.cropByHand(context, source));
-                    } else {
-                      onRemove();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'crop',
-                      enabled: !busy,
-                      child: const Row(
-                        children: [
-                          Icon(Icons.crop, size: 20),
-                          SizedBox(width: Space.md),
-                          Expanded(child: Text('Recortar otro tablero a mano')),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'remove',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline, size: 20),
-                          SizedBox(width: Space.md),
-                          Text('Quitar captura'),
-                        ],
-                      ),
-                    ),
-                  ],
+                IconButton(
+                  key: const ValueKey('capture-crop'),
+                  tooltip: 'Recortar otro tablero a mano',
+                  onPressed: busy
+                      ? null
+                      : () => unawaited(actions.cropByHand(context, source)),
+                  icon: const AppIcon(AppIcons.crop),
+                ),
+                IconButton(
+                  key: const ValueKey('capture-remove'),
+                  tooltip: 'Quitar captura',
+                  onPressed: onRemove,
+                  icon: const AppIcon(AppIcons.delete),
                 ),
               ],
             ),
@@ -481,18 +652,22 @@ class _CaptureHeader extends StatelessWidget {
 
 // ------------------------------------------------------------------------------------------ failure strip
 
-/// A capture that could not be read, inline in its group, with what happened and the way out.
+/// A capture that could not be read, inline in its group, with what happened and the way out. On a window with
+/// several columns it is a band across the content column (message at the start, actions at the end) instead of
+/// a block-sized box stuck in the first column.
 class _StatusStrip extends StatelessWidget {
   const _StatusStrip({
     super.key,
     required this.source,
     required this.actions,
     required this.onRemove,
+    required this.wide,
   });
 
   final SourceImage source;
   final HomeActions actions;
   final VoidCallback onRemove;
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
@@ -504,8 +679,46 @@ class _StatusStrip extends StatelessWidget {
     final message = failed
         ? source.errorMessage ??
               'No se pudo leer esta captura. Inténtalo de nuevo.'
-        : 'No se encontró ningún tablero en esta captura.';
+        : 'No se encontró ningún tablero en esta captura. Si el diagrama es pequeño, recórtalo a mano.';
     final busy = actions.isReadingRegion(source);
+    final lead = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppIcon(failed ? AppIcons.error : AppIcons.noBoard, color: fg),
+        const SizedBox(width: Space.md),
+        Expanded(
+          child: Text(
+            message,
+            style: theme.textTheme.bodyLarge?.copyWith(color: fg),
+          ),
+        ),
+      ],
+    );
+    final buttons = Wrap(
+      spacing: Space.sm,
+      runSpacing: Space.xs,
+      children: [
+        if (failed)
+          FilledButton.tonalIcon(
+            onPressed: () => actions.session.retry(source),
+            icon: const AppIcon(AppIcons.retry),
+            label: const Text('Reintentar'),
+          )
+        else
+          FilledButton.tonalIcon(
+            onPressed: busy
+                ? null
+                : () => unawaited(actions.cropByHand(context, source)),
+            icon: const AppIcon(AppIcons.crop),
+            label: const Text('Recortar a mano'),
+          ),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: fg),
+          onPressed: onRemove,
+          child: const Text('Quitar'),
+        ),
+      ],
+    );
     return DecoratedBox(
       decoration: BoxDecoration(
         color: bg,
@@ -513,53 +726,23 @@ class _StatusStrip extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(Space.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  failed ? Icons.error_outline : Icons.search_off,
-                  color: fg,
-                ),
-                const SizedBox(width: Space.md),
-                Expanded(
-                  child: Text(
-                    message,
-                    style: theme.textTheme.bodyLarge?.copyWith(color: fg),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: Space.md),
-            Wrap(
-              spacing: Space.sm,
-              runSpacing: Space.xs,
-              children: [
-                if (failed)
-                  FilledButton.tonalIcon(
-                    onPressed: () => actions.session.retry(source),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Reintentar'),
-                  )
-                else
-                  FilledButton.tonalIcon(
-                    onPressed: busy
-                        ? null
-                        : () => unawaited(actions.cropByHand(context, source)),
-                    icon: const Icon(Icons.crop),
-                    label: const Text('Recortar a mano'),
-                  ),
-                TextButton(
-                  style: TextButton.styleFrom(foregroundColor: fg),
-                  onPressed: onRemove,
-                  child: const Text('Quitar'),
-                ),
-              ],
-            ),
-          ],
-        ),
+        child: wide
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: lead),
+                  const SizedBox(width: Space.lg),
+                  buttons,
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  lead,
+                  const SizedBox(height: Space.md),
+                  buttons,
+                ],
+              ),
       ),
     );
   }
@@ -567,12 +750,13 @@ class _StatusStrip extends StatelessWidget {
 
 // -------------------------------------------------------------------------------------------- empty state
 
-/// First run: the result first (an example diagram drawn with the current ink and pieces), then three steps
+/// First run: the result first (an example diagram drawn with the current stone and pieces), then three steps
 /// and the one button. Two columns on wide windows.
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onPick});
+  const _EmptyState({required this.onPick, required this.android});
 
   final VoidCallback onPick;
+  final bool android;
 
   @override
   Widget build(BuildContext context) {
@@ -583,7 +767,7 @@ class _EmptyState extends StatelessWidget {
         final wide = width >= Breakpoint.expanded;
         final gutter = Space.gutter(width);
         final example = _Example(maxSide: wide ? 440 : 400);
-        final guide = _Guide(onPick: onPick, wide: wide);
+        final guide = _Guide(onPick: onPick, wide: wide, android: android);
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
             math.max(gutter, padding.left),
@@ -639,7 +823,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 /// A diagram block in miniature: numeral, status with the doubtful squares the product points out, and the
-/// board of the current ink and pieces.
+/// board of the current stone and pieces. It is labelled "Ejemplo" and its numeral is muted: it is not yours.
 class _Example extends StatelessWidget {
   const _Example({required this.maxSide});
 
@@ -670,14 +854,12 @@ class _Example extends StatelessWidget {
                     children: [
                       Text(
                         '1',
-                        style: app.numeral.copyWith(color: scheme.primary),
+                        style: app.numeral.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                       const SizedBox(width: Space.md),
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        size: 20,
-                        color: app.warning,
-                      ),
+                      AppIcon(AppIcons.warning, size: 20, color: app.warning),
                       const SizedBox(width: Space.sm),
                       Expanded(
                         child: Text(
@@ -685,6 +867,14 @@ class _Example extends StatelessWidget {
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: app.warning,
                           ),
+                        ),
+                      ),
+                      const SizedBox(width: Space.sm),
+                      Text(
+                        'Ejemplo',
+                        key: const ValueKey('example-label'),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -709,22 +899,26 @@ class _Example extends StatelessWidget {
 }
 
 class _Guide extends StatelessWidget {
-  const _Guide({required this.onPick, required this.wide});
+  const _Guide({
+    required this.onPick,
+    required this.wide,
+    required this.android,
+  });
 
   final VoidCallback onPick;
   final bool wide;
-
-  static const _steps = [
-    'Haz una captura de la página',
-    'Elígela aquí',
-    'Revisa y exporta',
-  ];
+  final bool android;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final text = theme.textTheme;
+    final steps = [
+      'Haz una captura de la página',
+      android ? 'Elige la imagen de tu galería' : 'Elige la imagen',
+      'Revisa y exporta',
+    ];
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 440),
       child: Column(
@@ -738,7 +932,7 @@ class _Guide extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Space.lg),
-          for (final (i, step) in _steps.indexed)
+          for (final (i, step) in steps.indexed)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Space.xs),
               child: Row(
@@ -761,14 +955,14 @@ class _Guide extends StatelessWidget {
           const SizedBox(height: Space.xl),
           FilledButton.icon(
             onPressed: onPick,
-            icon: const Icon(Icons.add_photo_alternate_outlined),
+            icon: const AppIcon(AppIcons.addCapture),
             label: const Text('Elegir captura'),
           ),
           const SizedBox(height: Space.lg),
           Row(
             children: [
-              Icon(
-                Icons.lock_outline,
+              AppIcon(
+                AppIcons.privacy,
                 size: 16,
                 color: scheme.onSurfaceVariant,
               ),

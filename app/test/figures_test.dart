@@ -96,9 +96,11 @@ void main() {
     expect(image.width, 480);
 
     // share of pure white / pure black pixels in a square (the squares themselves are tinted, never pure)
+    final layout = BoardLayout(480, coordinates: false);
     (double, double) whiteBlack(int sq) {
-      const cell = 60;
-      final x0 = (sq % 8) * cell, y0 = (sq ~/ 8) * cell;
+      final rect = layout.cellRect(sq);
+      final x0 = rect.left.ceil(), y0 = rect.top.ceil();
+      final cell = rect.width.floor() - 1;
       var white = 0, black = 0;
       for (var y = y0; y < y0 + cell; y++) {
         for (var x = x0; x < x0 + cell; x++) {

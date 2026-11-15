@@ -12,6 +12,7 @@ import '../diagram.dart';
 import '../export.dart' as exporter;
 import '../locate.dart';
 import '../session.dart';
+import 'icons.dart';
 import 'tokens.dart';
 
 /// Where images come from: the gallery. Null when the user cancels.
@@ -68,6 +69,25 @@ class HomeActions extends ChangeNotifier {
 
   /// Called with each capture the user adds, so the screen can scroll to its group.
   void Function(SourceImage source)? onCaptureAdded;
+
+  /// Set by the screen: scrolls to [diagram] and, with `review`, opens its "Revisar dudosas".
+  Future<void> Function(Diagram diagram, {bool review})? onRevealDiagram;
+
+  /// Scrolls the list to [diagram] (and opens its review) wherever the screen is; a no-op without a screen.
+  Future<void> goToDiagram(Diagram diagram, {bool review = false}) async =>
+      onRevealDiagram?.call(diagram, review: review);
+
+  bool _peekHintDismissed = false;
+
+  /// The hint "Mantén pulsado el tablero para ver el original." is shown once per session, until the user peeks
+  /// at the original or opens it with the segmented control.
+  bool get peekHintVisible => !_peekHintDismissed;
+
+  void dismissPeekHint() {
+    if (_peekHintDismissed) return;
+    _peekHintDismissed = true;
+    notifyListeners();
+  }
 
   bool _picking = false;
   final Set<SourceImage> _readingRegion = {};
@@ -197,7 +217,12 @@ class HomeActions extends ChangeNotifier {
     final name = exporter.pgnFileName(_now());
     try {
       final saved = await _saveFile(name, exporter.pgnBytes(session.allPgn));
-      if (saved) toast(messenger, 'Guardado: $name');
+      if (saved) {
+        toast(
+          messenger,
+          exporter.savedMessage(name, flagged: session.flaggedCount),
+        );
+      }
     } catch (_) {
       toast(
         messenger,
@@ -210,11 +235,17 @@ class HomeActions extends ChangeNotifier {
     }
   }
 
-  /// "Compartir": asks how (text or .pgn file) and hands [pgn] to the system share sheet.
-  Future<void> share(BuildContext context, String pgn) async {
+  /// Share or copy [pgn]: a small sheet with "Copiar PGN", "Compartir como texto" and "Compartir como archivo
+  /// .pgn". [copied] is what the snackbar says after copying.
+  Future<void> sharePgn(
+    BuildContext context,
+    String pgn, {
+    String copied = 'PGN copiado',
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     final how = await showModalBottomSheet<_ShareAs>(
       context: context,
+      showDragHandle: true,
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.only(bottom: Space.sm),
@@ -222,14 +253,22 @@ class HomeActions extends ChangeNotifier {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.notes),
-                title: const Text('Como texto'),
+                key: const ValueKey('share-copy'),
+                leading: const AppIcon(AppIcons.copy),
+                title: const Text('Copiar PGN'),
+                onTap: () => Navigator.pop(context, _ShareAs.copy),
+              ),
+              ListTile(
+                key: const ValueKey('share-text'),
+                leading: const AppIcon(AppIcons.share),
+                title: const Text('Compartir como texto'),
                 subtitle: const Text('Para chats y notas'),
                 onTap: () => Navigator.pop(context, _ShareAs.text),
               ),
               ListTile(
-                leading: const Icon(Icons.description_outlined),
-                title: const Text('Como archivo .pgn'),
+                key: const ValueKey('share-file'),
+                leading: const AppIcon(AppIcons.save),
+                title: const Text('Compartir como archivo .pgn'),
                 subtitle: const Text('Para abrirlo en una app de ajedrez'),
                 onTap: () => Navigator.pop(context, _ShareAs.file),
               ),
@@ -239,6 +278,11 @@ class HomeActions extends ChangeNotifier {
       ),
     );
     if (how == null) return;
+    if (how == _ShareAs.copy) {
+      await Clipboard.setData(ClipboardData(text: pgn));
+      toast(messenger, copied);
+      return;
+    }
     try {
       if (how == _ShareAs.text) {
         await _shareText(pgn);
@@ -251,4 +295,4 @@ class HomeActions extends ChangeNotifier {
   }
 }
 
-enum _ShareAs { text, file }
+enum _ShareAs { copy, text, file }

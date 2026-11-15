@@ -50,4 +50,23 @@ void main() {
       expect(await openInLichess(startFen), isFalse);
     },
   );
+
+  test(
+    'the export bar and the save snackbar say how many diagrams need a look',
+    () {
+      expect(diagramsText(1), '1 diagrama');
+      expect(diagramsText(3), '3 diagramas');
+      expect(warningsText(1), '1 con aviso');
+      expect(warningsText(3), '3 con avisos');
+      expect(savedMessage('a.pgn'), 'Guardado: a.pgn');
+      expect(
+        savedMessage('a.pgn', flagged: 3),
+        'Guardado: a.pgn · 3 diagramas con avisos',
+      );
+      expect(
+        savedMessage('a.pgn', flagged: 1),
+        'Guardado: a.pgn · 1 diagrama con aviso',
+      );
+    },
+  );
 }

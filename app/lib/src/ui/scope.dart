@@ -2,7 +2,7 @@
 // the settings (listen to them), the session and the piece-set catalogue.
 //
 //   final scope = AppScope.of(context);        // rebuilds when a setting changes
-//   scope.settings.inkId, scope.session, scope.catalog
+//   scope.settings.stoneId, scope.session, scope.catalog
 //   AppScope.maybeOf(context)                  // null in a tree without the app (plain widget tests)
 import 'package:material_ui/material_ui.dart';
 

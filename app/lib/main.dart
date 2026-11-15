@@ -42,7 +42,7 @@ Future<void> main() async {
 }
 
 /// The app: provides the settings, the session and the piece catalogue (see [AppScope]) and builds the
-/// Material app with the theme of the chosen ink. Everything is optional so a test can start it bare.
+/// Material app with the theme of the chosen stone. Everything is optional so a test can start it bare.
 class ChessPgnApp extends StatefulWidget {
   const ChessPgnApp({
     super.key,
@@ -77,7 +77,7 @@ class _ChessPgnAppState extends State<ChessPgnApp> with WidgetsBindingObserver {
       widget.catalog ?? PieceSetCatalog.builtIn();
 
   late bool _reduceMotion = _systemReducesMotion();
-  String? _themedInk;
+  String? _themedStone;
   late ThemeData _light, _dark;
 
   bool _systemReducesMotion() => WidgetsBinding
@@ -106,14 +106,14 @@ class _ChessPgnAppState extends State<ChessPgnApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// The two themes of the current ink; the same objects until the ink changes, so changing anything else
+  /// The two themes of the current stone; the same objects until the stone changes, so changing anything else
   /// (style, coordinates, pieces) does not restart the theme animation.
-  void _themeFor(String inkId) {
-    if (_themedInk == inkId) return;
-    final ink = inkById(inkId);
-    _light = buildTheme(ink, Brightness.light);
-    _dark = buildTheme(ink, Brightness.dark);
-    _themedInk = inkId;
+  void _themeFor(String stoneId) {
+    if (_themedStone == stoneId) return;
+    final stone = stoneById(stoneId);
+    _light = buildTheme(stone, Brightness.light);
+    _dark = buildTheme(stone, Brightness.dark);
+    _themedStone = stoneId;
   }
 
   @override
@@ -124,14 +124,14 @@ class _ChessPgnAppState extends State<ChessPgnApp> with WidgetsBindingObserver {
     child: ListenableBuilder(
       listenable: _settings,
       builder: (context, _) {
-        _themeFor(_settings.inkId);
+        _themeFor(_settings.stoneId);
         return MaterialApp(
           title: 'Chess to PGN',
           debugShowCheckedModeBanner: false,
           theme: _light,
           darkTheme: _dark,
           themeMode: _settings.themeMode,
-          // Re-inking is a ~200 ms theme lerp; the system's "remove animations" turns it into a cut.
+          // Laying another stone is a ~200 ms theme lerp; the system's "remove animations" turns it into a cut.
           themeAnimationDuration: _reduceMotion ? Duration.zero : Motion.medium,
           themeAnimationCurve: Motion.standard,
           locale: SpanishMaterialLocalizations.locale,

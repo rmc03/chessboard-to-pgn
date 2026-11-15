@@ -84,7 +84,16 @@ class DiagramStatus {
 
 /// Turns a problem string of [validate] (chess.dart) into a short Spanish sentence. Unknown strings are only
 /// capitalised and ended with a full stop, so a new rule in [validate] still shows something sensible.
-String describeProblem(String problem) {
+///
+/// With [turn] ('w' or 'b', the side to move) the check rule names the colour: the side that does not move is the
+/// one in check ("Las negras están en jaque y no les toca mover.").
+String describeProblem(String problem, {String? turn}) {
+  if (problem == 'el bando que no mueve está en jaque' &&
+      (turn == 'w' || turn == 'b')) {
+    return turn == 'w'
+        ? 'Las negras están en jaque y no les toca mover.'
+        : 'Las blancas están en jaque y no les toca mover.';
+  }
   const known = {
     'tablero vacío': 'El tablero está vacío.',
     'falta el rey blanco': 'Falta el rey blanco.',
@@ -121,7 +130,9 @@ class Diagram extends ChangeNotifier {
     this.manual = false,
     this.originalCrop,
     this._seenFromBlack = false,
-  }) : _castlingOff = {...castlingSwitchedOff};
+    List<int>? readGrid,
+  }) : _castlingOff = {...castlingSwitchedOff},
+       _readGrid = List<int>.of(readGrid ?? grid);
 
   factory Diagram.fromRecognized(RecognizedBoard b) => Diagram(
     grid: List<int>.of(b.grid),
@@ -170,6 +181,9 @@ class Diagram extends ChangeNotifier {
   final Set<CastlingRight> _castlingOff;
   bool _seenFromBlack;
 
+  /// The classes as the reader recognised them, same layout as [grid] (it turns with [rotate180]).
+  final List<int> _readGrid;
+
   static const double doubtful = 0.9;
 
   // ---------------------------------------------------------------- squares
@@ -214,6 +228,16 @@ class Diagram extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The class the reader recognised on [sq] (0..12), whatever the user did to the square since.
+  int readClass(int sq) => _readGrid[sq];
+
+  /// The user changed [sq] from what was read.
+  bool changedFromRead(int sq) => grid[sq] != _readGrid[sq];
+
+  /// "Volver a lo leído": puts the recognised class back on [sq]. The user chose it, so the square is trusted
+  /// from now on, like any other answer.
+  void restoreRead(int sq) => setSquare(sq, _readGrid[sq]);
+
   /// "e4, caballo blanco, dudosa" / "a1, vacía" (screen readers).
   String squareLabel(int sq) =>
       '${squareName(sq)}, ${pieceNames[grid[sq]]}${isDoubtful(sq) ? ', dudosa' : ''}';
@@ -232,6 +256,7 @@ class Diagram extends ChangeNotifier {
     final c = confidence.reversed.toList();
     grid.setAll(0, g);
     confidence.setAll(0, c);
+    _readGrid.setAll(0, _readGrid.reversed.toList());
     _seenFromBlack = !_seenFromBlack;
     notifyListeners();
   }
@@ -242,6 +267,16 @@ class Diagram extends ChangeNotifier {
   String? get forcedTurn => suggestTurn(placement);
 
   bool get turnIsForced => forcedTurn != null;
+
+  /// The side to move is free and changing it clears the "the side that does not move is in check" problem
+  /// (offered as "Cambiar turno" next to the error).
+  bool get switchingTurnFixesCheck {
+    const check = 'el bando que no mueve está en jaque';
+    if (turnIsForced || !problems.contains(check)) return false;
+    final other = turn == 'w' ? 'b' : 'w';
+    return !validate(toFen(placement, turn: other, castling: castlingField))
+        .contains(check);
+  }
 
   /// Why the control is locked ("El rey negro está en jaque: mueven negras."); null when the turn is free.
   String? get forcedTurnReason => switch (forcedTurn) {
@@ -320,8 +355,13 @@ class Diagram extends ChangeNotifier {
   List<String> get problems => validate(fen);
 
   /// Header information: doubtful squares and impossible-position reasons.
-  DiagramStatus get status =>
-      DiagramStatus(doubtfulCount, problems.map(describeProblem).toList());
+  DiagramStatus get status => DiagramStatus(
+    doubtfulCount,
+    problems.map((p) => describeProblem(p, turn: turn)).toList(),
+  );
+
+  /// Something to look at before exporting: doubtful squares or an impossible position.
+  bool get hasWarnings => hasDoubts || problems.isNotEmpty;
 
   /// One-game PGN for this diagram; the Event tag reads "Diagrama [number]".
   String pgn(int number) => toPgn(fen, event: 'Diagrama $number');
