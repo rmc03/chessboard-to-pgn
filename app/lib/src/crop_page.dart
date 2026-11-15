@@ -1,14 +1,21 @@
-// Full-screen manual crop: the user frames one board and gets its rectangle back in IMAGE PIXELS.
-// A rough frame with some margin is enough: the pipeline snaps to the 8x8 grid inside it.
-import 'dart:math' as math;
-import 'dart:typed_data';
+// Full-screen manual crop ("Recortar a mano"): the user frames one board on the screenshot and gets its
+// rectangle back in IMAGE PIXELS. A rough frame is enough: the pipeline snaps to the 8x8 grid inside it.
+//
+// Pieces: ui/crop_geometry.dart (pure maths), ui/crop_controller.dart (state), ui/crop_canvas.dart (the single
+// gesture layer, painter and loupe). This file is the page around them: app bar, bottom bar, zoom buttons,
+// keyboard focus, semantics.
 import 'dart:ui' as ui;
 
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'locate.dart';
+import 'ui/crop_canvas.dart';
+import 'ui/crop_controller.dart';
+import 'ui/tokens.dart';
 
-/// Opens the crop page; null when the user cancels.
+/// Opens the crop page; the chosen rectangle in image pixels, or null when the user cancels.
 Future<Box?> showCropPage(
   BuildContext context,
   Uint8List imageBytes, {
@@ -20,216 +27,127 @@ Future<Box?> showCropPage(
   ),
 );
 
-/// Touch target of every corner handle (logical px, at least 44).
-const double cropHandleSize = 48;
-
 class CropPage extends StatefulWidget {
   const CropPage({super.key, required this.imageBytes, this.initial});
 
   final Uint8List imageBytes;
 
-  /// Starting rectangle in image pixels; default = a centred square of 70 % of the shorter side.
+  /// Starting rectangle in image pixels (the view starts zoomed on it); default = a centred square of 70 % of
+  /// the shorter side with the whole image visible.
   final Box? initial;
 
   @override
   State<CropPage> createState() => _CropPageState();
 }
 
-class _CropPageState extends State<CropPage> {
-  Size? _size; // image size in pixels
-  Rect _rect = Rect.zero; // selection in image pixels
+class _CropPageState extends State<CropPage>
+    with SingleTickerProviderStateMixin {
+  CropController? _c;
   Object? _error;
+  final FocusNode _focus = FocusNode(debugLabel: 'crop canvas');
 
   @override
   void initState() {
     super.initState();
+    _focus.addListener(_refocus);
+    FocusManager.instance.addHighlightModeListener(_highlight);
     _load();
+  }
+
+  void _refocus() => setState(() {});
+  void _highlight(FocusHighlightMode _) {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
     try {
-      // Screenshots carry no EXIF rotation, so the decoded size is the displayed size.
+      // Decoded once. Screenshots carry no EXIF rotation, so the decoded size is the displayed size.
       final codec = await ui.instantiateImageCodec(widget.imageBytes);
       final frame = await codec.getNextFrame();
-      final size = Size(
-        frame.image.width.toDouble(),
-        frame.image.height.toDouble(),
-      );
-      frame.image.dispose();
       codec.dispose();
-      if (!mounted) return;
+      if (!mounted) {
+        frame.image.dispose();
+        return;
+      }
+      final i = widget.initial;
       setState(() {
-        _size = size;
-        _rect = _startRect(size);
+        _c = CropController(
+          image: frame.image,
+          vsync: this,
+          initial: i == null ? null : Rect.fromLTRB(i.x0, i.y0, i.x1, i.y1),
+        );
       });
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
   }
 
-  double _minSide(Size s) => math.min(24, math.min(s.width, s.height));
-
-  Rect _startRect(Size s) {
-    final i = widget.initial;
-    if (i != null) {
-      final r = Rect.fromLTRB(
-        i.x0,
-        i.y0,
-        i.x1,
-        i.y1,
-      ).intersect(Rect.fromLTWH(0, 0, s.width, s.height));
-      final m = _minSide(s);
-      if (r.width >= m && r.height >= m) return r;
-    }
-    final side = 0.7 * math.min(s.width, s.height);
-    return Rect.fromCenter(
-      center: Offset(s.width / 2, s.height / 2),
-      width: side,
-      height: side,
-    );
+  @override
+  void dispose() {
+    FocusManager.instance.removeHighlightModeListener(_highlight);
+    _focus
+      ..removeListener(_refocus)
+      ..dispose();
+    final c = _c;
+    c?.dispose();
+    c?.image.dispose();
+    super.dispose();
   }
 
-  /// Moves one corner by [d] image pixels, keeping the rectangle inside the image and above the minimum size.
-  void _resize(bool left, bool top, Offset d) {
-    final s = _size!;
-    final m = _minSide(s);
-    var l = _rect.left, t = _rect.top, r = _rect.right, b = _rect.bottom;
-    if (left) {
-      l = (l + d.dx).clamp(0.0, r - m);
-    } else {
-      r = (r + d.dx).clamp(l + m, s.width);
-    }
-    if (top) {
-      t = (t + d.dy).clamp(0.0, b - m);
-    } else {
-      b = (b + d.dy).clamp(t + m, s.height);
-    }
-    setState(() => _rect = Rect.fromLTRB(l, t, r, b));
+  void _accept() {
+    final c = _c;
+    if (c == null) return;
+    final r = c.rect;
+    Navigator.of(context).pop(Box(r.left, r.top, r.right, r.bottom));
   }
 
-  void _move(Offset d) {
-    final s = _size!;
-    final dx = d.dx.clamp(-_rect.left, s.width - _rect.right);
-    final dy = d.dy.clamp(-_rect.top, s.height - _rect.bottom);
-    setState(() => _rect = _rect.shift(Offset(dx, dy)));
-  }
-
-  void _accept() => Navigator.pop(
-    context,
-    Box(_rect.left, _rect.top, _rect.right, _rect.bottom),
-  );
-
-  Widget _canvas(BoxConstraints c) {
-    final size = _size!;
-    final scale = math.min(c.maxWidth / size.width, c.maxHeight / size.height);
-    final shown = Size(size.width * scale, size.height * scale);
-    final origin = Offset(
-      (c.maxWidth - shown.width) / 2,
-      (c.maxHeight - shown.height) / 2,
-    );
-    final sel = Rect.fromLTRB(
-      origin.dx + _rect.left * scale,
-      origin.dy + _rect.top * scale,
-      origin.dx + _rect.right * scale,
-      origin.dy + _rect.bottom * scale,
-    );
-    final colors = Theme.of(context).colorScheme;
-
-    Widget handle(String id, bool left, bool top) {
-      final p = Offset(left ? sel.left : sel.right, top ? sel.top : sel.bottom);
-      return Positioned(
-        left: p.dx - cropHandleSize / 2,
-        top: p.dy - cropHandleSize / 2,
-        width: cropHandleSize,
-        height: cropHandleSize,
-        child: GestureDetector(
-          key: ValueKey('handle-$id'),
-          behavior: HitTestBehavior.opaque,
-          onPanUpdate: (u) => _resize(left, top, u.delta / scale),
-          child: Center(
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: colors.primary,
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFFFFFFF), width: 2),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Stack(
-      children: [
-        Positioned.fromRect(
-          rect: origin & shown,
-          child: Image.memory(
-            widget.imageBytes,
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
-          ),
-        ),
-        Positioned.fill(
-          child: IgnorePointer(
-            child: CustomPaint(
-              painter: _DimPainter(sel, colors.primary, origin & shown),
-            ),
-          ),
-        ),
-        Positioned.fromRect(
-          rect: sel,
-          child: GestureDetector(
-            key: const ValueKey('crop-move'),
-            behavior: HitTestBehavior.opaque,
-            onPanUpdate: (u) => _move(u.delta / scale),
-          ),
-        ),
-        handle('tl', true, true),
-        handle('tr', false, true),
-        handle('bl', true, false),
-        handle('br', false, false),
-      ],
-    );
-  }
+  void _close() => Navigator.of(context).maybePop();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Recortar')),
-      body: SafeArea(
-        child: Column(
+    final scheme = Theme.of(context).colorScheme;
+    final c = _c;
+    c?.animationDuration = Motion.of(context, Motion.medium);
+
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close},
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Cerrar',
+            onPressed: _close,
+          ),
+          title: const Text('Recortar tablero'),
+        ),
+        body: Column(
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Text('Encierra un tablero (mejor con un poco de margen)'),
-            ),
             Expanded(
               child: _error != null
-                  ? Center(child: Text('No se pudo leer la imagen: $_error'))
-                  : _size == null
+                  ? const _Message('No se pudo leer la imagen.')
+                  : c == null
                   ? const Center(child: CircularProgressIndicator())
-                  : LayoutBuilder(builder: (_, c) => _canvas(c)),
+                  : _Stage(
+                      controller: c,
+                      focusNode: _focus,
+                      onAccept: _accept,
+                      palette: CropPalette(
+                        canvas: Color.alphaBlend(
+                          scheme.scrim.withValues(alpha: 0.82),
+                          scheme.surfaceContainerHighest,
+                        ),
+                        scrim: scheme.scrim.withValues(alpha: 0.55),
+                        accent: scheme.primary,
+                        light: BoardMarks.paper,
+                        dark: BoardMarks.pieceBlack,
+                      ),
+                      showFocusRing:
+                          _focus.hasFocus &&
+                          FocusManager.instance.highlightMode ==
+                              FocusHighlightMode.traditional,
+                    ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancelar'),
-                  ),
-                  FilledButton(
-                    onPressed: _size == null ? null : _accept,
-                    child: const Text('Leer tablero'),
-                  ),
-                ],
-              ),
-            ),
+            _BottomBar(onReset: c?.reset, onAccept: c == null ? null : _accept),
           ],
         ),
       ),
@@ -237,28 +155,175 @@ class _CropPageState extends State<CropPage> {
   }
 }
 
-/// Dims everything of the image outside the selection and outlines the selection.
-class _DimPainter extends CustomPainter {
-  _DimPainter(this.sel, this.color, this.image);
-  final Rect sel, image;
-  final Color color;
+class _Message extends StatelessWidget {
+  const _Message(this.text);
+  final String text;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addRect(image)
-      ..addRect(sel);
-    canvas.drawPath(path, Paint()..color = const Color(0x99000000));
-    canvas.drawRect(
-      sel,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..color = color,
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(Space.xl),
+      child: Text(text, style: Theme.of(context).textTheme.bodyLarge),
+    ),
+  );
+}
+
+/// The canvas with its semantics and, on wide windows, the zoom buttons.
+class _Stage extends StatelessWidget {
+  const _Stage({
+    required this.controller,
+    required this.focusNode,
+    required this.onAccept,
+    required this.palette,
+    required this.showFocusRing,
+  });
+
+  final CropController controller;
+  final FocusNode focusNode;
+  final VoidCallback onAccept;
+  final CropPalette palette;
+  final bool showFocusRing;
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= Breakpoint.medium;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: ListenableBuilder(
+            listenable: controller,
+            // The canvas repaints itself from the controller; only the semantics value is rebuilt per change.
+            child: CropCanvas(
+              key: const ValueKey('crop-canvas'),
+              controller: controller,
+              palette: palette,
+              focusNode: focusNode,
+              onAccept: onAccept,
+              showFocusRing: showFocusRing,
+            ),
+            builder: (context, canvas) {
+              final (w, h) = controller.percent;
+              return Semantics(
+                container: true,
+                label:
+                    'Recortar tablero. Arrastra las esquinas o los bordes para encerrar el tablero; '
+                    'pellizca para ampliar.',
+                value: 'Recorte: $w % del ancho, $h % del alto',
+                customSemanticsActions: {
+                  const CustomSemanticsAction(label: 'Acercar'):
+                      controller.zoomIn,
+                  const CustomSemanticsAction(label: 'Alejar'):
+                      controller.zoomOut,
+                },
+                child: canvas,
+              );
+            },
+          ),
+        ),
+        if (wide)
+          Positioned(
+            right: Space.lg,
+            bottom: Space.lg,
+            child: ListenableBuilder(
+              listenable: controller,
+              builder: (context, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton.filledTonal(
+                    key: const ValueKey('zoom-in'),
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Acercar',
+                    onPressed: controller.canZoomIn ? controller.zoomIn : null,
+                  ),
+                  const SizedBox(height: Space.sm),
+                  IconButton.filledTonal(
+                    key: const ValueKey('zoom-out'),
+                    icon: const Icon(Icons.remove),
+                    tooltip: 'Alejar',
+                    onPressed: controller.canZoomOut
+                        ? controller.zoomOut
+                        : null,
+                  ),
+                  const SizedBox(height: Space.sm),
+                  IconButton.filledTonal(
+                    key: const ValueKey('zoom-fit'),
+                    icon: const Icon(Icons.fit_screen),
+                    tooltip: 'Ver toda la imagen',
+                    onPressed: controller.canZoomOut
+                        ? controller.fitView
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
+}
+
+class _BottomBar extends StatelessWidget {
+  const _BottomBar({required this.onReset, required this.onAccept});
+
+  final VoidCallback? onReset, onAccept;
 
   @override
-  bool shouldRepaint(_DimPainter old) => old.sel != sel || old.image != image;
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final wide = MediaQuery.sizeOf(context).width >= Breakpoint.medium;
+    final hint = Text(
+      'Encierra el tablero; no hace falta que sea exacto.',
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: scheme.onSurfaceVariant,
+      ),
+    );
+    final reset = TextButton(
+      key: const ValueKey('crop-reset'),
+      onPressed: onReset,
+      child: const Text('Restablecer'),
+    );
+    final accept = FilledButton(
+      key: const ValueKey('crop-accept'),
+      onPressed: onAccept,
+      child: const Text('Leer este tablero'),
+    );
+    final gutter = Space.gutter(MediaQuery.sizeOf(context).width);
+
+    return Material(
+      color: scheme.surfaceContainer,
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: Space.sm),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(gutter, Space.md, gutter, Space.xs),
+          child: wide
+              ? Row(
+                  children: [
+                    Expanded(child: hint),
+                    const SizedBox(width: Space.lg),
+                    reset,
+                    const SizedBox(width: Space.sm),
+                    accept,
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    hint,
+                    const SizedBox(height: Space.sm),
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: Space.sm,
+                      runSpacing: Space.sm,
+                      children: [reset, accept],
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
 }

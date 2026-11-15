@@ -157,6 +157,17 @@ class SourceImage {
   Future<void> get finished => _finished.future;
 }
 
+/// How many doubtful squares make the reading of a whole-image fallback board implausible.
+const int implausibleDoubts = 16;
+
+/// The reader found no frame and read the whole image as one board, and the reading is mostly doubt: the
+/// image is not a diagram. [Session] then ends the capture as [SourceStatus.noBoards] (no diagram) so the UI
+/// offers "Recortar a mano" instead of a nonsense position. A fallback board with fewer doubts is kept.
+bool implausibleFallback(RecognizedBoard board) =>
+    board.fallback &&
+    board.confidence.where((c) => c < Diagram.doubtful).length >=
+        implausibleDoubts;
+
 /// What [Session.removeDiagram] took out; hand it to [Session.restore] to undo ("Deshacer").
 class RemovedDiagram {
   const RemovedDiagram._(this.diagram, this.source, this.index);
@@ -305,8 +316,14 @@ class Session extends ChangeNotifier {
     final done = <int, RecognizedBoard>{};
     var next = 0; // index of the next board to release into source.diagrams
 
-    void release() {
+    // A lone whole-image fallback board whose reading is implausible is not shown: it would flash in and out
+    // when the capture ends as noBoards (see [implausibleFallback]). [force] releases it all the same.
+    void release({bool force = false}) {
       while (done.containsKey(next)) {
+        final board = done[next]!;
+        if (!force && (source._found ?? 1) == 1 && implausibleFallback(board)) {
+          break;
+        }
         source._diagrams.add(Diagram.fromRecognized(done.remove(next)!));
         next++;
       }
@@ -336,9 +353,10 @@ class Session extends ChangeNotifier {
       for (var i = next; i < boards.length; i++) {
         done.putIfAbsent(i, () => boards[i]);
       }
-      release();
-      source._found = boards.length;
-      source._status = boards.isEmpty
+      final lone = boards.length == 1 && implausibleFallback(boards.first);
+      release(force: !lone);
+      source._found = lone ? 0 : boards.length;
+      source._status = boards.isEmpty || lone
           ? SourceStatus.noBoards
           : SourceStatus.done;
     } catch (e) {

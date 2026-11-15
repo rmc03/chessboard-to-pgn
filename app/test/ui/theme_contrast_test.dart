@@ -103,6 +103,29 @@ void main() {
           );
         });
 
+        test('chip labels, check marks and tonal button labels reach 4.5:1', () {
+          final chip = theme.chipTheme;
+          const selected = {WidgetState.selected};
+          const plain = <WidgetState>{};
+          Color labelOf(Set<WidgetState> st) =>
+              WidgetStateProperty.resolveAs<Color?>(chip.labelStyle!.color, st)!;
+          final selectedFill = chip.color!.resolve(selected)!;
+          atLeast('selected chip label/fill', labelOf(selected), selectedFill, 4.5);
+          atLeast('selected chip check/fill', chip.checkmarkColor!, selectedFill, 4.5);
+          // an unselected chip has no fill: it sits on whatever surface holds it
+          expect(chip.color!.resolve(plain), isNull);
+          for (final (name, bg) in [
+            ('surface', s.surface),
+            ('surfaceContainerLow', s.surfaceContainerLow),
+            ('surfaceContainer', s.surfaceContainer),
+          ]) {
+            atLeast('unselected chip label/$name', labelOf(plain), bg, 4.5);
+          }
+          atLeast('unselected chip rule/surfaceContainerLow', WidgetStateProperty.resolveAs<BorderSide?>(chip.side, plain)!.color, s.surfaceContainerLow, 3);
+          // FilledButton.tonal: onSecondaryContainer on secondaryContainer
+          atLeast('tonal button label/fill', s.onSecondaryContainer, s.secondaryContainer, 7);
+        });
+
         test('graphic elements reach 3:1', () {
           atLeast('outline/surface', s.outline, s.surface, 3);
           atLeast('outline/surfaceContainerLow', s.outline, s.surfaceContainerLow, 3);
@@ -139,6 +162,30 @@ void main() {
         expect(contrastRatio(BoardMarks.doubtEdge, ink.darkSquare), greaterThanOrEqualTo(3));
         expect(contrastRatio(BoardMarks.doubtEdge, BoardMarks.doubt), greaterThanOrEqualTo(3));
       });
+    });
+  }
+
+  // What really gets painted, not only what the theme says.
+  for (final brightness in Brightness.values) {
+    testWidgets('rendered chips and tonal button are legible (${brightness.name})', (tester) async {
+      final theme = buildTheme(defaultInk, brightness);
+      final s = theme.colorScheme;
+      await tester.pumpWidget(MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          body: Column(children: [
+            FilterChip(label: const Text('Sí'), selected: true, onSelected: (_) {}),
+            FilterChip(label: const Text('No'), selected: false, onSelected: (_) {}),
+            FilledButton.tonal(onPressed: () {}, child: const Text('Tonal')),
+          ]),
+        ),
+      ));
+      // the label is painted with the ambient text style of its widget
+      Color colorOf(String text) =>
+          DefaultTextStyle.of(tester.element(find.text(text))).style.color!;
+      expect(contrastRatio(colorOf('Sí'), s.secondaryContainer), greaterThanOrEqualTo(4.5));
+      expect(contrastRatio(colorOf('No'), s.surface), greaterThanOrEqualTo(4.5));
+      expect(contrastRatio(colorOf('Tonal'), s.secondaryContainer), greaterThanOrEqualTo(4.5));
     });
   }
 }

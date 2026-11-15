@@ -241,7 +241,7 @@ ThemeData buildTheme(SpotInk ink, Brightness brightness) {
     onSecondaryContainer: _strengthen(
       base.onSecondaryContainer,
       base.secondaryContainer,
-      7,
+      9,
     ),
   );
   final amber = _warningScheme(ink, brightness);
@@ -344,12 +344,7 @@ ThemeData buildTheme(SpotInk ink, Brightness brightness) {
         side: ring(BorderSide(color: scheme.outline)),
       ),
     ),
-    chipTheme: ChipThemeData(
-      shape: controlShape,
-      side: BorderSide(color: scheme.outlineVariant),
-      labelStyle: text.labelLarge,
-      padding: const EdgeInsets.symmetric(horizontal: Space.xs),
-    ),
+    chipTheme: chipTheme(scheme, text, controlShape),
     switchTheme: SwitchThemeData(
       thumbIcon: WidgetStateProperty.resolveWith(
         (states) => Icon(
@@ -446,6 +441,41 @@ ThemeData buildTheme(SpotInk ink, Brightness brightness) {
     ),
   );
 }
+
+/// Filter chips: selected = tonal container with `onSecondaryContainer` text and check; unselected = no fill
+/// (the surface behind it) with `onSurface` text and an `outline` rule. Spelled out because the Material
+/// default colours are lost as soon as a theme sets `labelStyle` without a colour.
+@visibleForTesting
+ChipThemeData chipTheme(
+  ColorScheme scheme,
+  TextTheme text,
+  OutlinedBorder shape,
+) => ChipThemeData(
+  shape: shape,
+  // The chip resolves the label colour itself: it has to be a WidgetStateColor inside the style.
+  labelStyle: text.labelLarge!.copyWith(
+    color: WidgetStateColor.resolveWith(
+      (states) => states.contains(WidgetState.disabled)
+          ? scheme.onSurface.withValues(alpha: 0.38)
+          : states.contains(WidgetState.selected)
+          ? scheme.onSecondaryContainer
+          : scheme.onSurface,
+    ),
+  ),
+  color: WidgetStateProperty.resolveWith(
+    (states) => states.contains(WidgetState.selected)
+        ? scheme.secondaryContainer
+        : null,
+  ),
+  side: WidgetStateBorderSide.resolveWith(
+    (states) => states.contains(WidgetState.selected)
+        ? BorderSide.none
+        : BorderSide(color: scheme.outline),
+  ),
+  checkmarkColor: scheme.onSecondaryContainer,
+  iconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 18),
+  padding: const EdgeInsets.symmetric(horizontal: Space.xs),
+);
 
 SystemUiOverlayStyle _overlayStyle(Color bar, Color page) {
   Brightness iconsOn(Color c) =>
