@@ -33,6 +33,10 @@ flutter:
     - assets/pieces/chessnut/
     - assets/pieces/mpchess/
     - assets/pieces/celtic/
+    - assets/licenses/
+    - assets/fonts/OFL-Archivo.txt
+    - assets/fonts/OFL-JetBrainsMono.txt
+    - assets/fonts/LICENSE-DejaVu.txt
   fonts:
     - family: ChessFigures
       fonts:

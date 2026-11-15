@@ -1,9 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'board_view.dart';
 import 'chess.dart';
 import 'diagram.dart';
+import 'ui/board.dart';
+import 'ui/pieces.dart';
+import 'ui/theme.dart';
+import 'ui/tokens.dart';
 
 class DiagramCard extends StatefulWidget {
   const DiagramCard({
@@ -48,8 +51,8 @@ class _DiagramCardState extends State<DiagramCard> {
                   key: ValueKey('pick-$cls'),
                   onPressed: () => Navigator.pop(context, cls),
                   child: cls == 0
-                      ? const Text('vacía', style: TextStyle(fontSize: 14))
-                      : PieceFigure(cls, size: 30),
+                      ? const Text('vacía')
+                      : PieceView(cls, size: 30),
                 ),
             ],
           ),
@@ -86,10 +89,24 @@ class _DiagramCardState extends State<DiagramCard> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: d.doubtfulCount > 0
-                      ? Text(
-                          '${d.doubtfulCount} casilla(s) dudosa(s) en ámbar',
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(color: Color(0xFFE65100)),
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              size: 20,
+                              color: context.app.warning,
+                            ),
+                            const SizedBox(width: Space.xs),
+                            Flexible(
+                              child: Text(
+                                '${d.doubtfulCount} casilla(s) dudosa(s) en ámbar',
+                                textAlign: TextAlign.right,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(color: context.app.warning),
+                              ),
+                            ),
+                          ],
                         )
                       : const SizedBox.shrink(),
                 ),
@@ -139,7 +156,7 @@ class _DiagramCardState extends State<DiagramCard> {
                 ),
               ),
             const SizedBox(height: 8),
-            BoardView(grid: d.grid, doubtful: d.isDoubtful, onTap: _edit),
+            BoardView(diagram: d, onTap: _edit),
             const SizedBox(height: 8),
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -171,12 +188,29 @@ class _DiagramCardState extends State<DiagramCard> {
                 widget.onChanged?.call();
               },
             ),
-            SelectableText(
-              d.fen,
-              style: const TextStyle(fontFamily: 'monospace'),
-            ),
+            SelectableText(d.fen, style: context.app.mono),
             for (final p in problems)
-              Text('⚠ $p', style: const TextStyle(color: Color(0xFFC62828))),
+              Padding(
+                padding: const EdgeInsets.only(top: Space.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: Space.sm),
+                    Expanded(
+                      child: Text(
+                        p,
+                        style: Theme.of(context).textTheme.bodyMedium
+                            ?.copyWith(color: Theme.of(context).colorScheme.error),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (widget.onAdjust != null)
               Align(
                 alignment: Alignment.centerRight,

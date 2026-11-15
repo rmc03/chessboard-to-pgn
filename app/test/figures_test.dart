@@ -4,8 +4,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:chessboard_pgn/src/board_view.dart';
 import 'package:chessboard_pgn/src/chess.dart';
+import 'package:chessboard_pgn/src/settings.dart';
+import 'package:chessboard_pgn/src/ui/board.dart';
+import 'package:chessboard_pgn/src/ui/pieces.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,10 +67,12 @@ void main() {
             child: SizedBox(
               width: 480,
               height: 480,
-              child: BoardView(
+              // the built-in set (no SVG), no coordinates: only squares and figures
+              child: BoardView.fromGrid(
                 grid: grid,
-                doubtful: (_) => false,
-                onTap: (_) {},
+                pieceSetId: PieceSetCatalog.fallbackId,
+                showCoordinates: false,
+                style: BoardStyle.flat,
               ),
             ),
           ),
@@ -91,7 +95,7 @@ void main() {
     });
     expect(image.width, 480);
 
-    // share of pure white / pure black pixels in a square (the squares themselves are cream and brown)
+    // share of pure white / pure black pixels in a square (the squares themselves are tinted, never pure)
     (double, double) whiteBlack(int sq) {
       const cell = 60;
       final x0 = (sq % 8) * cell, y0 = (sq ~/ 8) * cell;
@@ -102,7 +106,7 @@ void main() {
           final r = rgba.getUint8(i),
               g = rgba.getUint8(i + 1),
               b = rgba.getUint8(i + 2);
-          if (r > 235 && g > 235 && b > 235) white++;
+          if (r > 245 && g > 245 && b > 245) white++;
           if (r < 40 && g < 40 && b < 40) black++;
         }
       }
