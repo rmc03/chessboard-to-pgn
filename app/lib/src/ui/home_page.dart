@@ -12,7 +12,6 @@ import 'package:material_ui/material_ui.dart';
 import '../../main.dart' show kAppVersion;
 import '../diagram.dart';
 import '../export.dart' as exporter;
-import '../locate.dart';
 import '../session.dart';
 import 'board.dart';
 import 'diagram_block.dart';

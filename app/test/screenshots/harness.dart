@@ -68,6 +68,8 @@ class Scene {
     this.textScale13 = false,
     this.phone = true,
     this.desktop = true,
+    this.readImage,
+    this.readRegion,
   });
 
   final String name;
@@ -76,6 +78,10 @@ class Scene {
   final SceneSetup? setup;
   final Size phoneSize, desktopSize;
   final bool textScale13, phone, desktop;
+
+  /// Readers of the scene's [Session]; [fakeReadImage] and the real region reader by default.
+  final ReadImageFn? readImage;
+  final ReadRegionFn? readRegion;
 }
 
 final List<Scene> registeredScenes = [];
@@ -91,6 +97,8 @@ void registerScene(
   bool textScale13 = false,
   bool phone = true,
   bool desktop = true,
+  ReadImageFn? readImage,
+  ReadRegionFn? readRegion,
 }) {
   assert(
     !registeredScenes.any((s) => s.name == name),
@@ -107,6 +115,8 @@ void registerScene(
       textScale13: textScale13,
       phone: phone,
       desktop: desktop,
+      readImage: readImage,
+      readRegion: readRegion,
     ),
   );
 }
@@ -218,7 +228,10 @@ Future<String> renderScene(
   await settings.setThemeMode(
     brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
   );
-  final session = Session(readImage: fakeReadImage);
+  final session = Session(
+    readImage: scene.readImage ?? fakeReadImage,
+    readRegion: scene.readRegion,
+  );
   final env = SceneEnv(settings, session, catalog);
 
   final key = GlobalKey();

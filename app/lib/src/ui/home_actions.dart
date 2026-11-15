@@ -40,7 +40,7 @@ class HomeActions extends ChangeNotifier {
     exporter.SaveFileFn? saveFile,
     exporter.ShareTextFn? shareText,
     exporter.ShareFileFn? shareFile,
-    exporter.OpenUriFn? openUri,
+    this._openUri,
     bool? canShare,
     DateTime Function()? now,
   }) : _pickImage = pickImage ?? pickFromGallery,
@@ -48,7 +48,6 @@ class HomeActions extends ChangeNotifier {
        _saveFile = saveFile ?? exporter.saveFileWithDialog,
        _shareText = shareText ?? exporter.shareText,
        _shareFile = shareFile ?? exporter.shareFile,
-       _openUri = openUri,
        canShare = canShare ?? exporter.canShare,
        _now = now ?? DateTime.now;
 

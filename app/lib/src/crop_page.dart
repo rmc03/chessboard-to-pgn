@@ -136,7 +136,7 @@ class _CropPageState extends State<CropPage>
                           scheme.scrim.withValues(alpha: 0.82),
                           scheme.surfaceContainerHighest,
                         ),
-                        scrim: scheme.scrim.withValues(alpha: 0.55),
+                        scrim: scheme.scrim.withValues(alpha: 0.5),
                         accent: scheme.primary,
                         light: BoardMarks.paper,
                         dark: BoardMarks.pieceBlack,

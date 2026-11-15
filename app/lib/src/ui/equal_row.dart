@@ -25,9 +25,9 @@ class EqualHeightRow extends MultiChildRenderObjectWidget {
   @override
   void updateRenderObject(
     BuildContext context,
-    covariant _RenderEqualHeightRow renderObject,
+    covariant RenderObject renderObject,
   ) {
-    renderObject
+    (renderObject as _RenderEqualHeightRow)
       ..columns = columns
       ..gap = gap;
   }

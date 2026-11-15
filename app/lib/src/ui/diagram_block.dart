@@ -6,10 +6,8 @@
 // while a board is still being read, so nothing jumps when the reading arrives.
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../chess.dart';
 import '../diagram.dart';
 import '../session.dart';
 import 'board.dart';

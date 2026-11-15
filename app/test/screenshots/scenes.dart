@@ -1,5 +1,4 @@
 // The scenes the screenshot harness renders (see harness.dart for how to run it and how to add one).
-import 'dart:typed_data';
 
 import 'package:chessboard_pgn/main.dart';
 import 'package:chessboard_pgn/src/settings.dart';
@@ -9,10 +8,10 @@ import 'package:chessboard_pgn/src/ui/settings_page.dart';
 import 'package:chessboard_pgn/src/ui/theme.dart';
 import 'package:chessboard_pgn/src/ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image/image.dart' as img;
 import 'package:material_ui/material_ui.dart';
 
 import 'harness.dart';
+import 'home_scenes.dart';
 
 void registerAllScenes() {
   registerScene(
@@ -70,36 +69,7 @@ void registerAllScenes() {
       await tester.pump(const Duration(milliseconds: 400));
     },
   );
-  registerScene(
-    'home',
-    (env) => _homeWithTwoDiagrams(),
-    setup: _readTwoDiagrams,
-  );
-  registerScene(
-    'home_full',
-    (env) => _homeWithTwoDiagrams(),
-    setup: _readTwoDiagrams,
-    phoneSize: const Size(412, 2300),
-    desktopSize: const Size(1280, 1700),
-  );
-}
-
-// ------------------------------------------------------------------------------------------------ home
-
-Widget _homeWithTwoDiagrams() => HomePage(
-  pickImage: () async =>
-      Uint8List.fromList(img.encodePng(img.Image(width: 4, height: 4))),
-  recognize: (bytes, onFound) async {
-    final boards = fakeBoards();
-    onFound(boards.length);
-    return boards;
-  },
-);
-
-Future<void> _readTwoDiagrams(WidgetTester tester, SceneEnv env) async {
-  await tester.tap(find.text('Elegir imagen'));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 100));
+  registerHomeScenes();
 }
 
 // -------------------------------------------------------------------------------------------- gallery
