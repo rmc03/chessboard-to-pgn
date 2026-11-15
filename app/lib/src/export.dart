@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const pgnMimeType = 'application/x-chess-pgn';
 
@@ -51,3 +52,34 @@ Future<void> shareFile(String fileName, Uint8List bytes) async {
 
 /// Sharing is only useful on phones: on Windows it opens the system share pane (or a mail draft on old versions).
 bool get canShare => defaultTargetPlatform == TargetPlatform.android;
+
+/// Opens [uri] outside the app (the user's browser or the Lichess app). True when something took it.
+typedef OpenUriFn = Future<bool> Function(Uri uri);
+
+/// Lichess analysis board for [fen]: `https://lichess.org/analysis/standard/<FEN>`. The slashes of the
+/// placement stay path separators and every space of the FEN becomes `_`, which is how Lichess writes its own
+/// analysis links (e.g. `.../standard/8/8/8/8/8/8/8/4K2k_w_-_-_0_1`). A FEN only holds letters, digits, `/`, `-`
+/// and spaces, so nothing needs percent-encoding.
+Uri lichessAnalysisUri(String fen) => Uri(
+  scheme: 'https',
+  host: 'lichess.org',
+  pathSegments: [
+    'analysis',
+    'standard',
+    ...fen.trim().replaceAll(' ', '_').split('/'),
+  ],
+);
+
+Future<bool> _launchExternally(Uri uri) =>
+    launchUrl(uri, mode: LaunchMode.externalApplication);
+
+/// Opens the position in the Lichess analysis board in the browser/app. Returns false (never throws) when
+/// nothing could open it, so the caller can fall back to copying `lichessAnalysisUri(fen)` to the clipboard.
+/// [open] replaces the real launcher in tests.
+Future<bool> openInLichess(String fen, {OpenUriFn? open}) async {
+  try {
+    return await (open ?? _launchExternally)(lichessAnalysisUri(fen));
+  } catch (_) {
+    return false;
+  }
+}

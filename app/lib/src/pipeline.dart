@@ -20,10 +20,14 @@ class PreparedBoard {
     this.cells, {
     this.fallback = false,
     this.manual = false,
+    this.originalCrop,
   });
 
   /// Board box in image pixels.
   final Box box;
+
+  /// PNG of exactly [box] cut from the source image (see [encodeCrop]).
+  final Uint8List? originalCrop;
 
   /// 64 x 32 x 32 floats in [0, 1], rank 8 first, file a first.
   final Float32List cells;
@@ -43,8 +47,13 @@ class RecognizedBoard {
     this.rawArgmax,
     this.fallback, {
     this.manual = false,
+    this.originalCrop,
   });
   final Box box;
+
+  /// PNG of exactly [box] cut from the source image, longest side capped at [maxCropSide] pixels. Null when
+  /// the board came from somewhere that has no image (tests, fakes).
+  final Uint8List? originalCrop;
   final List<int> grid;
   final List<double> confidence;
   final List<int> rawArgmax;
@@ -52,6 +61,39 @@ class RecognizedBoard {
   final bool manual;
 
   String get placement => gridToPlacement(grid);
+}
+
+/// Longest side, in pixels, of [RecognizedBoard.originalCrop].
+const int maxCropSide = 600;
+
+/// PNG of [box] cut from [rgb] with no margin, so that it overlays the drawn board square for square. The box
+/// is rounded to whole pixels and clamped to the image; the longest side is capped at [maxSide] (smaller
+/// crops are never enlarged).
+Uint8List encodeCrop(Rgb rgb, Box box, {int maxSide = maxCropSide}) {
+  final crop = rgb.crop(
+    box.x0.round(),
+    box.y0.round(),
+    box.x1.round(),
+    box.y1.round(),
+  );
+  var image = img.Image.fromBytes(
+    width: crop.w,
+    height: crop.h,
+    bytes: crop.data.buffer,
+    numChannels: 3,
+    order: img.ChannelOrder.rgb,
+  );
+  final longest = math.max(crop.w, crop.h);
+  if (longest > maxSide) {
+    final k = maxSide / longest;
+    image = img.copyResize(
+      image,
+      width: math.max(1, (crop.w * k).round()),
+      height: math.max(1, (crop.h * k).round()),
+      interpolation: img.Interpolation.average,
+    );
+  }
+  return img.encodePng(image, level: 3);
 }
 
 Rgb decodeRgb(Uint8List bytes) {
@@ -107,14 +149,32 @@ Float32List cutSquares(Gray gray, Box box, {int size = squareSize}) {
   return out;
 }
 
+/// The boards of an image plus the size of the (orientation-corrected) image they are measured in.
+class PreparedImage {
+  PreparedImage(this.width, this.height, this.boards);
+  final int width, height;
+  final List<PreparedBoard> boards;
+}
+
 /// Finds every complete framed diagram of an image and cuts its squares. If none is framed, the whole
 /// image is treated as a single board (an already-cropped diagram), flagged `fallback`.
-List<PreparedBoard> prepareBoards(Uint8List imageBytes) {
+List<PreparedBoard> prepareBoards(Uint8List imageBytes) =>
+    prepareImage(imageBytes).boards;
+
+/// [prepareBoards] that also reports the image size.
+PreparedImage prepareImage(Uint8List imageBytes) {
   final rgb = decodeRgb(imageBytes);
   final boxes = findBoards(rgb, resize: resizeBicubic);
   if (boxes.isEmpty) {
     final box = findBoard(rgb);
-    return [PreparedBoard(box, cutSquares(rgb.toGray(), box), fallback: true)];
+    return PreparedImage(rgb.w, rgb.h, [
+      PreparedBoard(
+        box,
+        cutSquares(rgb.toGray(), box),
+        fallback: true,
+        originalCrop: encodeCrop(rgb, box),
+      ),
+    ]);
   }
   final prepared = <PreparedBoard>[];
   for (final b in boxes) {
@@ -123,14 +183,16 @@ List<PreparedBoard> prepareBoards(Uint8List imageBytes) {
         oy = math.max(0, b.y0.toInt() - pad);
     final crop = rgb.crop(ox, oy, b.x1.toInt() + pad, b.y1.toInt() + pad);
     final local = findBoard(crop);
+    final box = Box(local.x0 + ox, local.y0 + oy, local.x1 + ox, local.y1 + oy);
     prepared.add(
       PreparedBoard(
-        Box(local.x0 + ox, local.y0 + oy, local.x1 + ox, local.y1 + oy),
+        box,
         cutSquares(crop.toGray(), local),
+        originalCrop: encodeCrop(rgb, box),
       ),
     );
   }
-  return prepared;
+  return PreparedImage(rgb.w, rgb.h, prepared);
 }
 
 /// The board inside a region the user drew by hand (image pixels). The region is clamped to the image and
@@ -154,10 +216,12 @@ PreparedBoard prepareRegion(Uint8List imageBytes, Box region) {
   if (!plausible) {
     local = Box(0, 0, crop.w.toDouble(), crop.h.toDouble());
   }
+  final box = Box(local.x0 + x0, local.y0 + y0, local.x1 + x0, local.y1 + y0);
   return PreparedBoard(
-    Box(local.x0 + x0, local.y0 + y0, local.x1 + x0, local.y1 + y0),
+    box,
     cutSquares(crop.toGray(), local),
     manual: true,
+    originalCrop: encodeCrop(rgb, box),
   );
 }
 
@@ -171,7 +235,36 @@ RecognizedBoard classifyBoard(ModelAssets model, PreparedBoard board) {
     d.rawArgmax,
     board.fallback,
     manual: board.manual,
+    originalCrop: board.originalCrop,
   );
+}
+
+/// Called once the boards are located: how many, and the size of the image the box coordinates refer to.
+typedef BoardsFoundFn = void Function(int boards, int width, int height);
+
+/// Called as each board finishes (in completion order, not necessarily [index] order).
+typedef BoardReadFn = void Function(int index, RecognizedBoard board);
+
+/// Whole pipeline off the UI thread, reporting progress: [onFound] once the boards are located, then [onBoard]
+/// for each board as its classification finishes. Returns the boards in reading order.
+Future<List<RecognizedBoard>> recognizeImageStreaming(
+  Uint8List imageBytes,
+  ModelAssets model, {
+  BoardsFoundFn? onFound,
+  BoardReadFn? onBoard,
+}) async {
+  final prepared = await Isolate.run(() => prepareImage(imageBytes));
+  onFound?.call(prepared.boards.length, prepared.width, prepared.height);
+  return Future.wait([
+    for (final (i, p)
+        in prepared
+            .boards
+            .indexed) // capture one board, not all of them, in each isolate
+      Isolate.run(() => classifyBoard(model, p)).then((b) {
+        onBoard?.call(i, b);
+        return b;
+      }),
+  ]);
 }
 
 /// Whole pipeline off the UI thread. [onFound] is called once the boards are located (to show progress).
@@ -179,13 +272,11 @@ Future<List<RecognizedBoard>> recognizeImage(
   Uint8List imageBytes,
   ModelAssets model, {
   void Function(int boards)? onFound,
-}) async {
-  final prepared = await Isolate.run(() => prepareBoards(imageBytes));
-  onFound?.call(prepared.length);
-  return Future.wait([
-    for (final p in prepared) Isolate.run(() => classifyBoard(model, p)),
-  ]);
-}
+}) => recognizeImageStreaming(
+  imageBytes,
+  model,
+  onFound: onFound == null ? null : (n, _, _) => onFound(n),
+);
 
 /// [prepareRegion] + classification off the UI thread.
 Future<RecognizedBoard> recognizeRegion(
