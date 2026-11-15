@@ -304,7 +304,7 @@ void main() {
     testWidgets(
       'Original fades the crop in over exactly the squares of the board',
       (tester) async {
-        final home = await _home(tester, [board(middlegame, crop: true)]);
+        await _home(tester, [board(middlegame, crop: true)]);
         expect(overlay(tester), 0);
         final blockHeight = tester.getSize(find.byType(DiagramBlock)).height;
 

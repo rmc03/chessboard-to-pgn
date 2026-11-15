@@ -685,33 +685,44 @@ class DiagramBlockState extends State<DiagramBlock> {
     final canShare = _actions.canShare;
     return Row(
       children: [
-        Flexible(
-          child: FilledButton.tonalIcon(
-            key: const ValueKey('lichess'),
-            onPressed: () => unawaited(_actions.openLichess(context, _d)),
-            icon: const AppIcon(AppIcons.openExternal),
-            label: const Text('Analizar en Lichess'),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: FilledButton.tonalIcon(
+                    key: const ValueKey('lichess'),
+                    onPressed: () =>
+                        unawaited(_actions.openLichess(context, _d)),
+                    icon: const AppIcon(AppIcons.openExternal),
+                    label: const Text('Analizar en Lichess'),
+                  ),
+                ),
+                const SizedBox(width: Space.xs),
+                if (canShare)
+                  IconButton(
+                    key: const ValueKey('share-pgn'),
+                    tooltip: 'Compartir o copiar PGN',
+                    onPressed: () => unawaited(
+                      _actions.sharePgn(context, _session.pgnOf(_d)),
+                    ),
+                    icon: const AppIcon(AppIcons.share),
+                  )
+                else
+                  IconButton(
+                    key: const ValueKey('copy-pgn'),
+                    tooltip: 'Copiar PGN',
+                    onPressed: () => unawaited(
+                      _actions.copy(context, _session.pgnOf(_d), 'PGN copiado'),
+                    ),
+                    icon: const AppIcon(AppIcons.copy),
+                  ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: Space.xs),
-        if (canShare)
-          IconButton(
-            key: const ValueKey('share-pgn'),
-            tooltip: 'Compartir o copiar PGN',
-            onPressed: () =>
-                unawaited(_actions.sharePgn(context, _session.pgnOf(_d))),
-            icon: const AppIcon(AppIcons.share),
-          )
-        else
-          IconButton(
-            key: const ValueKey('copy-pgn'),
-            tooltip: 'Copiar PGN',
-            onPressed: () => unawaited(
-              _actions.copy(context, _session.pgnOf(_d), 'PGN copiado'),
-            ),
-            icon: const AppIcon(AppIcons.copy),
-          ),
-        const Spacer(),
         IconButton(
           key: const ValueKey('remove-diagram'),
           tooltip: 'Quitar diagrama',

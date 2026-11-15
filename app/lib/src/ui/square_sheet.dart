@@ -161,6 +161,10 @@ class _SquareSheetState extends State<SquareSheet> {
                       if (changed)
                         TextButton(
                           key: const ValueKey('restore-read'),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            alignment: Alignment.centerLeft,
+                          ),
                           onPressed: () =>
                               _resolve(() => _d.restoreRead(_square)),
                           child: const Text('Volver a lo leído'),

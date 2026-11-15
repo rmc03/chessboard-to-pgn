@@ -41,10 +41,13 @@ enum Capture {
 
   const Capture(this.code);
   final int code;
-  Uint8List get bytes => Uint8List.fromList([code]);
+
+  /// The page itself (so the capture thumbnail is a real picture) with the scene's code as the last byte.
+  Uint8List get bytes => Uint8List.fromList([..._page, code]);
 }
 
 List<RecognizedBoard>? _real;
+List<int> _page = const [];
 
 Future<List<RecognizedBoard>> _loadReal() async {
   final model = ModelAssets(
@@ -81,7 +84,7 @@ List<RecognizedBoard> _three() {
   final r = _real!;
   return [
     // clean position, black to move (forced by a check), two doubtful squares
-    _copy(r[2], confidence: {18: 0.62, 36: 0.81}),
+    _copy(r[2], confidence: {26: 0.62, 36: 0.81}),
     // impossible: both kings in check; one doubtful square on top
     _copy(r[1], confidence: {49: 0.7}),
     // clean, white to move (forced by a check): a rook was missing from the reading
@@ -118,7 +121,7 @@ Future<List<RecognizedBoard>> _read(
     return boards;
   }
 
-  switch (bytes.first) {
+  switch (bytes.last) {
     case 1:
       return deliver(_three());
     case 2:
@@ -147,6 +150,7 @@ Widget _home() => HomePage(
 /// Loads the real boards (real async: it runs the pipeline in an isolate).
 Future<void> _prepare(WidgetTester tester) async {
   _picks.clear();
+  _page = File('test/fixtures/page_three_boards.png').readAsBytesSync();
   _real ??= (await tester.runAsync(_loadReal))!;
 }
 
@@ -154,10 +158,25 @@ Future<void> _prepare(WidgetTester tester) async {
 Future<void> _add(WidgetTester tester, List<Capture> captures) async {
   for (final (i, c) in captures.indexed) {
     _picks.add(c.bytes);
-    await tester.tap(find.text(i == 0 ? 'Elegir captura' : 'Añadir captura'));
+    await tester.tap(
+      i == 0 ? find.text('Elegir captura') : find.byType(FloatingActionButton),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 400));
+  }
+}
+
+/// Scrolls the session list to its very end (the last block, "Quitar todas las capturas").
+Future<void> _toEnd(WidgetTester tester) async {
+  for (var i = 0; i < 3; i++) {
+    await tester.fling(
+      find.byType(CustomScrollView),
+      const Offset(0, -20000),
+      8000,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
   }
 }
 
@@ -167,7 +186,15 @@ SceneSetup _session(
 ]) => (tester, env) async {
   await _prepare(tester);
   await _add(tester, captures);
+  // let the thumbnails and crops decode (real async) before the picture is taken
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 400)),
+  );
+  await tester.pump(const Duration(milliseconds: 100));
   await then?.call(tester);
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 400)),
+  );
 };
 
 void registerHomeScenes() {
@@ -238,18 +265,61 @@ void registerHomeScenes() {
   );
 
   registerScene(
-    'menu_block',
+    'share_sheet',
     (env) => _home(),
     readImage: _read,
     setup: _session([Capture.three], (tester) async {
-      await tester.tap(
-        find.descendant(
-          of: find.byType(DiagramBlock).first,
-          matching: find.byTooltip('Más opciones'),
-        ),
-      );
+      await tester.tap(find.byTooltip('Compartir o copiar PGN').first);
       await tester.pump(const Duration(milliseconds: 400));
     }),
+  );
+
+  registerScene(
+    'sheet_changed_square',
+    (env) => _home(),
+    readImage: _read,
+    setup: _session([Capture.three], (tester) async {
+      // an occupied square the user changed, opened again: "Se leyó" + "Volver a lo leído"
+      final square = find.byKey(const ValueKey('square-26')).first;
+      await tester.tap(square);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('pick-5')));
+      await tester.pumpAndSettle();
+      await tester.tap(square);
+      await tester.pump(const Duration(milliseconds: 500));
+    }),
+  );
+
+  registerScene(
+    'block_impossible_doubtful',
+    (env) => _home(),
+    readImage: _read,
+    setup: _session([Capture.three], (tester) async {
+      if (find.byType(DiagramBlock).evaluate().length < 2) {
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
+        await tester.pumpAndSettle();
+      }
+      await tester.ensureVisible(find.byType(DiagramBlock).at(1));
+      await tester.pumpAndSettle();
+    }),
+  );
+
+  registerScene(
+    'export_warnings',
+    (env) => _home(),
+    readImage: _read,
+    setup: _session([Capture.three]),
+    textScale13: true,
+  );
+
+  registerScene(
+    'home_end',
+    (env) => _home(),
+    readImage: _read,
+    setup: _session([Capture.three], _toEnd),
+    textScale13: true,
+    phoneSize: const Size(360, 780),
+    desktopSize: const Size(1280, 800),
   );
 
   registerScene(

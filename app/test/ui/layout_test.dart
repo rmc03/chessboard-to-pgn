@@ -19,7 +19,7 @@ Future<Home> _session(
         for (var i = 0; i < boards; i++)
           switch (i % 3) {
             0 => board(middlegame, confidence: {18: 0.5, 21: 0.5}, crop: true),
-            1 => board('8/8/8/8/8/8/8/4K3', confidence: {10: 0.4}),
+            1 => board('8/8/8/8/8/8/8/4K3'),
             _ => board(castlingCheck),
           },
       ],
@@ -98,12 +98,29 @@ void main() {
     }
     expect(tops.toSet().length, 1);
     expect(heights.toSet().length, 1, reason: '$heights');
-    // header height is fixed, so the boards sit at the same height even when statuses differ
+    // header height is fixed, so the boards sit at the same height even when statuses differ; the one block
+    // with an original also shows the hint line under its comparator
     expect(
       boardTops.map((y) => y.round()).toSet().length,
       2,
-      reason: 'one block has no comparator: $boardTops',
+      reason: 'one block shows the hint: $boardTops',
     );
+    // ... until the hint is dismissed (first peek or first tap on Original): then the boards line up
+    await tester.tap(find.text('Original').first);
+    await tester.pumpAndSettle();
+    final after = [
+      for (var i = 0; i < 3; i++)
+        tester
+            .getTopLeft(
+              find.descendant(
+                of: blocks.at(i),
+                matching: find.byKey(const ValueKey('square-0')),
+              ),
+            )
+            .dy
+            .round(),
+    ];
+    expect(after.toSet().length, 1, reason: '$after');
     // the FEN lines sit at the bottom of the equal-height blocks
     expect(bottoms.map((y) => y.round()).toSet().length, 1, reason: '$bottoms');
   });
@@ -118,7 +135,7 @@ void main() {
         5000,
       );
       await tester.pumpAndSettle();
-      final fab = tester.getRect(find.text('Añadir captura'));
+      final fab = tester.getRect(find.byType(FloatingActionButton));
       final last = find.byType(DiagramBlock).last;
       final fen = tester.getRect(
         find.descendant(
@@ -151,10 +168,10 @@ void main() {
         expect(tester.takeException(), isNull, reason: 'after scroll $i');
       }
       await tester.pumpAndSettle();
-      // the export bar wraps instead of clipping: both its parts are fully visible
+      // the export bar stays one row: the count and the icon buttons are fully visible
       expect(find.text('3 diagramas'), findsOneWidget);
-      expect(find.text('Guardar .pgn'), findsOneWidget);
-      final bar = tester.getRect(find.text('Guardar .pgn'));
+      expect(find.byTooltip('Guardar .pgn'), findsOneWidget);
+      final bar = tester.getRect(find.byKey(const ValueKey('copy-all')));
       expect(bar.right, lessThanOrEqualTo(360));
       expect(tester.takeException(), isNull);
     },

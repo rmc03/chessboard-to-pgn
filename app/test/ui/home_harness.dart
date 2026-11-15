@@ -1,7 +1,6 @@
 // Shared setup of the home-screen tests: a real app around [HomePage] with every platform call replaced by a
 // recording fake, and boards that are easy to reason about.
 import 'dart:async';
-import 'dart:io';
 
 import 'package:chessboard_pgn/main.dart';
 import 'package:chessboard_pgn/src/chess.dart';
@@ -16,47 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:material_ui/material_ui.dart';
 
-import '../screenshots/harness.dart' as harness;
-
-/// The real fonts (see the screenshot harness). TEMPORARY fallback: while the harness still names the old font
-/// files, load the Barlow ones directly.
-Future<void> loadRealFonts() async {
-  try {
-    await harness.loadRealFonts();
-  } on PathNotFoundException {
-    TestWidgetsFlutterBinding.ensureInitialized();
-    Future<void> family(String name, List<String> files) async {
-      final loader = FontLoader(name);
-      for (final f in files) {
-        loader.addFont(
-          Future.value(ByteData.sublistView(File(f).readAsBytesSync())),
-        );
-      }
-      await loader.load();
-    }
-
-    const d = 'assets/fonts';
-    await family('Barlow', [
-      '$d/Barlow-Regular.ttf',
-      '$d/Barlow-Medium.ttf',
-      '$d/Barlow-SemiBold.ttf',
-      '$d/Barlow-Bold.ttf',
-    ]);
-    await family('BarlowCondensed', [
-      '$d/BarlowCondensed-SemiBold.ttf',
-      '$d/BarlowCondensed-Bold.ttf',
-    ]);
-    await family('JetBrainsMono', [
-      '$d/JetBrainsMono-Regular.ttf',
-      '$d/JetBrainsMono-Medium.ttf',
-    ]);
-    await family('ChessFigures', ['$d/ChessFigures.ttf']);
-    final icons = File(
-      '${Platform.environment['FLUTTER_ROOT'] ?? Platform.environment['PATH']!.split(':').firstWhere((p) => File('$p/flutter').existsSync()).replaceFirst(RegExp(r'/bin$'), '')}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-    );
-    if (icons.existsSync()) await family('MaterialIcons', [icons.path]);
-  }
-}
+export '../screenshots/harness.dart' show loadRealFonts;
 
 const middlegame = 'r1bq1rk1/pp2ppbp/2np1np1/8/3NP3/2N1BP2/PPPQ2PP/2KR1B1R';
 const endgame = '8/5pk1/6p1/3R4/8/6P1/5PK1/3r4';
