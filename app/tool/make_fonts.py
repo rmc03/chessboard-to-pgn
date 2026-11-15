@@ -30,8 +30,18 @@ JOBS = [
     ("ArchivoCondensed-Bold", "archivo", "Archivo%5Bwdth%2Cwght%5D.ttf", {"wght": 700, "wdth": 75}),
     ("JetBrainsMono-Regular", "jetbrainsmono", "JetBrainsMono%5Bwght%5D.ttf", {"wght": 400}),
     ("JetBrainsMono-Medium", "jetbrainsmono", "JetBrainsMono%5Bwght%5D.ttf", {"wght": 500}),
+    # Barlow is a family of static files (axes None): subset only, no instancing.
+    ("Barlow-Regular", "barlow", "Barlow-Regular.ttf", None),
+    ("Barlow-Medium", "barlow", "Barlow-Medium.ttf", None),
+    ("Barlow-SemiBold", "barlow", "Barlow-SemiBold.ttf", None),
+    ("Barlow-Bold", "barlow", "Barlow-Bold.ttf", None),
+    ("BarlowCondensed-SemiBold", "barlowcondensed", "BarlowCondensed-SemiBold.ttf", None),
+    ("BarlowCondensed-Bold", "barlowcondensed", "BarlowCondensed-Bold.ttf", None),
 ]
-LICENCES = {"archivo": "OFL-Archivo.txt", "jetbrainsmono": "OFL-JetBrainsMono.txt"}
+LICENCES = {"archivo": "OFL-Archivo.txt", "jetbrainsmono": "OFL-JetBrainsMono.txt",
+            "barlow": "OFL-Barlow.txt"}
+# barlowcondensed/OFL.txt is byte-identical to barlow/OFL.txt, so one licence file is kept.
+LICENCE_SRC = {"barlowcondensed": "barlow"}
 
 UNICODES = (
     list(range(0x20, 0x7F)) + list(range(0xA0, 0x100)) + list(range(0x100, 0x180))
@@ -39,7 +49,7 @@ UNICODES = (
     + [0x2026, 0x20AC, 0x2212, 0xD7, 0x25CB, 0x25CF, 0x2713, 0xBD]
 )
 FEATURES = ["tnum", "lnum", "case", "liga", "kern", "calt", "mark", "mkmk", "ccmp", "locl"]
-SAMPLES = ["Diagrama 12 · Mueven blancas ñ á ü ¿? ½ → 0123456789", "rnbqkbnr/pppppppp/8/8/4P3 w KQkq - 0 1"]
+SAMPLES = ["Diagrama 12 · Mueven blancas ñ á ü ¿? ½ → 0123456789", "rnbqkbnr/pppppppp/8/8/4P3 w KQkq - 0 1", "r1bq1rk1/pp2ppbp w KQkq - 0 1"]
 
 
 def fetch(url):
@@ -64,9 +74,15 @@ def main():
     for out, d, fname, axes in JOBS:
         if (d, fname) not in cache:
             cache[(d, fname)] = fetch(f"{RAW}/{d}/{fname}")
-            (OUT / LICENCES[d]).write_bytes(fetch(f"{RAW}/{d}/OFL.txt"))
+            lic = LICENCE_SRC.get(d, d)
+            data = fetch(f"{RAW}/{d}/OFL.txt")
+            if d in LICENCE_SRC:
+                assert data == fetch(f"{RAW}/{lic}/OFL.txt"), f"{d} licence differs from {lic}"
+            else:
+                (OUT / LICENCES[d]).write_bytes(data)
         font = TTFont(io.BytesIO(cache[(d, fname)]))
-        font = instancer.instantiateVariableFont(font, axes)
+        if axes:
+            font = instancer.instantiateVariableFont(font, axes)
         opts = subset.Options()
         opts.layout_features = FEATURES
         opts.hinting = False
@@ -76,11 +92,18 @@ def main():
         sub.populate(unicodes=UNICODES)
         sub.subset(font)
         family, style = out.split("-")
-        family = {"Archivo": "Archivo", "ArchivoCondensed": "Archivo Condensed"}.get(family, "JetBrains Mono")
+        family = {"Archivo": "Archivo", "ArchivoCondensed": "Archivo Condensed", "Barlow": "Barlow",
+                  "BarlowCondensed": "Barlow Condensed"}.get(family, "JetBrains Mono")
         set_names(font, family, {"SemiBold": "SemiBold"}.get(style, style))
         cmap = font.getBestCmap()
-        missing = {c for s in SAMPLES for c in s if ord(c) not in cmap}
+        # Upstream Barlow has no arrows (U+2190-2193), check marks or circles; Flutter falls back
+        # to another font for them, so only U+2192 in the sample text is tolerated as missing.
+        optional = {"→"} if out.startswith("Barlow") else set()
+        missing = {c for s in SAMPLES for c in s if ord(c) not in cmap} - optional
         assert not missing, f"{out}: missing glyphs {missing}"
+        if out.startswith("Barlow"):
+            feats = {f.FeatureTag for f in font["GSUB"].table.FeatureList.FeatureRecord}
+            assert "tnum" in feats, f"{out}: no tnum feature"
         path = OUT / f"{out}.ttf"
         font.save(path)
         print(f"{path.name}: {path.stat().st_size} bytes")

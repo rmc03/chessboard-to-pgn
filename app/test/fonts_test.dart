@@ -18,6 +18,8 @@ const _files = {
     700: 'Archivo-Bold',
   },
   'ArchivoCondensed': {600: 'ArchivoCondensed-SemiBold', 700: 'ArchivoCondensed-Bold'},
+  'Barlow': {400: 'Barlow-Regular', 500: 'Barlow-Medium', 600: 'Barlow-SemiBold', 700: 'Barlow-Bold'},
+  'BarlowCondensed': {600: 'BarlowCondensed-SemiBold', 700: 'BarlowCondensed-Bold'},
   'JetBrainsMono': {400: 'JetBrainsMono-Regular', 500: 'JetBrainsMono-Medium'},
 };
 
@@ -72,6 +74,10 @@ void main() {
     // Different files give different metrics.
     expect(widths['Archivo-400/0'], isNot(closeTo(widths['Archivo-700/0']!, 0.5)));
     expect(widths['ArchivoCondensed-700/0']!, lessThan(widths['Archivo-700/0']! * 0.92));
+    expect(widths['Barlow-400/0'], isNot(closeTo(widths['Barlow-700/0']!, 0.5)));
+    expect(widths['Barlow-500/0'], isNot(closeTo(widths['Barlow-600/0']!, 0.1)));
+    expect(widths['BarlowCondensed-700/0']!, lessThan(widths['Barlow-700/0']! * 0.92));
+    expect(widths['Barlow-400/0'], isNot(closeTo(widths['Archivo-400/0']!, 1)));
     expect(widths['JetBrainsMono-400/0'], isNot(closeTo(widths['Archivo-400/0']!, 1)));
   });
 

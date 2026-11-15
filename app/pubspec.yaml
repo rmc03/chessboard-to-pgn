@@ -36,6 +36,7 @@ flutter:
     - assets/licenses/
     - assets/fonts/OFL-Archivo.txt
     - assets/fonts/OFL-JetBrainsMono.txt
+    - assets/fonts/OFL-Barlow.txt
     - assets/fonts/LICENSE-DejaVu.txt
   fonts:
     - family: ChessFigures
@@ -56,6 +57,22 @@ flutter:
         - asset: assets/fonts/ArchivoCondensed-SemiBold.ttf
           weight: 600
         - asset: assets/fonts/ArchivoCondensed-Bold.ttf
+          weight: 700
+    - family: Barlow
+      fonts:
+        - asset: assets/fonts/Barlow-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Barlow-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Barlow-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Barlow-Bold.ttf
+          weight: 700
+    - family: BarlowCondensed
+      fonts:
+        - asset: assets/fonts/BarlowCondensed-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/BarlowCondensed-Bold.ttf
           weight: 700
     - family: JetBrainsMono
       fonts:
