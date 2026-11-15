@@ -13,12 +13,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals, visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../chess.dart';
 import '../diagram.dart';
 import '../settings.dart';
+import 'color_math.dart';
 import 'pieces.dart';
 import 'scope.dart';
 import 'theme.dart';
@@ -32,6 +34,44 @@ const String samplePlacement =
 /// [samplePlacement] as a grid (White's side).
 List<int> sampleGrid() => placementToGrid(samplePlacement);
 
+final Map<(String, Brightness), Color> _inkPrimaries = {};
+
+/// The `primary` role of [ink] in [brightness], computed as the theme does (fidelity scheme of the seed). It is
+/// the colour the masthead and numerals print in, and it is cached per ink.
+Color inkPrimary(SpotInk ink, Brightness brightness) =>
+    _inkPrimaries.putIfAbsent(
+      (ink.id, brightness),
+      () => ColorScheme.fromSeed(
+        seedColor: ink.seed,
+        brightness: brightness,
+        dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
+      ).primary,
+    );
+
+/// The deep tone of [ink] (its light-theme `primary`), the same in both themes. The selected square is drawn
+/// with it so the ring keeps 3:1 or more against both square colours even when the dark theme's `primary` is
+/// pale.
+///
+/// If that primary keeps less than 3.2:1 against either square of the ink (madera's does, 2.75:1 on its dark
+/// square), it is darkened toward black in 4 % steps until it does.
+Color inkDeepTone(SpotInk ink) => _deepTones.putIfAbsent(ink.id, () {
+  var c = inkPrimary(ink, Brightness.light);
+  for (var i = 0; i < 20; i++) {
+    if (contrastRatio(c, ink.lightSquare) >= 3.2 &&
+        contrastRatio(c, ink.darkSquare) >= 3.2) {
+      break;
+    }
+    c = Color.lerp(c, const Color(0xFF000000), 0.04)!;
+  }
+  return c;
+});
+
+final Map<String, Color> _deepTones = {};
+
+/// Counts calls of the board painters' `paint` (tests check that unrelated rebuilds do not repaint).
+@visibleForTesting
+int boardPaintCount = 0;
+
 /// Where the parts of a board of side [side] are. Use it to overlay something exactly on the squares (for
 /// instance the original crop in the "Original" comparator).
 class BoardLayout {
@@ -39,9 +79,11 @@ class BoardLayout {
     : gutter = coordinates && side >= minSideForCoordinates
           ? (side * 0.045).clamp(14.0, 20.0)
           : 0,
-      board = side - (coordinates && side >= minSideForCoordinates
-          ? (side * 0.045).clamp(14.0, 20.0)
-          : 0);
+      board =
+          side -
+          (coordinates && side >= minSideForCoordinates
+              ? (side * 0.045).clamp(14.0, 20.0)
+              : 0);
 
   /// Below this side the coordinates are left out automatically (they would not be legible).
   static const double minSideForCoordinates = 168;
@@ -60,8 +102,12 @@ class BoardLayout {
   Rect get boardRect => Rect.fromLTWH(gutter, 0, board, board);
 
   /// The square drawn at screen position [index] (0..63, row-major from the top-left).
-  Rect cellRect(int index) =>
-      Rect.fromLTWH(gutter + (index % 8) * cell, (index ~/ 8) * cell, cell, cell);
+  Rect cellRect(int index) => Rect.fromLTWH(
+    gutter + (index % 8) * cell,
+    (index ~/ 8) * cell,
+    cell,
+    cell,
+  );
 }
 
 /// An interactive or static board.
@@ -148,7 +194,7 @@ class BoardView extends StatefulWidget {
   /// A square was tapped (Diagram index). Without it the board is not interactive.
   final void Function(int square)? onTap;
 
-  /// The square being edited (Diagram index): wash and 3 dp `primary` rule.
+  /// The square being edited (Diagram index): wash and 3 dp ring in the ink's deep tone (see [inkDeepTone]).
   final int? selected;
 
   /// Draw the board from Black's side (a1 at the top right).
@@ -260,6 +306,8 @@ class _BoardViewState extends State<BoardView> {
           constraints.maxWidth.isFinite ? constraints.maxWidth : 320.0,
           constraints.maxHeight.isFinite ? constraints.maxHeight : 320.0,
         );
+        // Accepted exception to the 48 dp target: the board fills the width, so a phone cell is about 40 dp;
+        // squares are tapped one at a time and a visible confirmation sheet follows.
         final side = widget.size ?? fit;
         final layout = BoardLayout(side, coordinates: wantCoordinates);
         final labelStyle = (theme.textTheme.labelSmall ?? const TextStyle())
@@ -292,17 +340,18 @@ class _BoardViewState extends State<BoardView> {
               hatch: widget.ink?.seed ?? app.boardHatch,
               paper: app.boardPaper,
               rule: scheme.outline,
-              primary: scheme.primary,
-              onPrimary: scheme.onPrimary,
+              deepTone: inkDeepTone(widget.ink ?? app.ink),
               labelStyle: labelStyle,
               showCoordinates: layout.gutter > 0,
               catalog: _catalog,
               setId: _setId,
             );
-            Widget board = CustomPaint(
-              size: Size.square(side),
-              painter: painter,
-              isComplex: true,
+            Widget board = RepaintBoundary(
+              child: CustomPaint(
+                size: Size.square(side),
+                painter: painter,
+                isComplex: true,
+              ),
             );
             if (widget.semanticLabel != null) {
               board = Semantics(
@@ -312,12 +361,7 @@ class _BoardViewState extends State<BoardView> {
                 child: board,
               );
             } else {
-              board = Stack(
-                children: [
-                  board,
-                  ..._targets(layout),
-                ],
-              );
+              board = Stack(children: [board, ..._targets(layout)]);
               board = Semantics(
                 container: true,
                 explicitChildNodes: true,
@@ -353,8 +397,7 @@ class _BoardViewState extends State<BoardView> {
 
   List<Widget> _targets(BoardLayout layout) {
     return [
-      for (var i = 0; i < 64; i++)
-        _target(i, _squareAt(i), layout.cellRect(i)),
+      for (var i = 0; i < 64; i++) _target(i, _squareAt(i), layout.cellRect(i)),
     ];
   }
 
@@ -404,8 +447,7 @@ class _BoardPainter extends CustomPainter {
     required this.hatch,
     required this.paper,
     required this.rule,
-    required this.primary,
-    required this.onPrimary,
+    required this.deepTone,
     required this.labelStyle,
     required this.showCoordinates,
     required this.catalog,
@@ -418,7 +460,7 @@ class _BoardPainter extends CustomPainter {
   final int? selected, pressed, cursor;
   final bool blackAtBottom, showCoordinates;
   final BoardStyle style;
-  final Color light, dark, hatch, paper, rule, primary, onPrimary;
+  final Color light, dark, hatch, paper, rule, deepTone;
   final TextStyle labelStyle;
   final PieceSetCatalog catalog;
   final String setId;
@@ -427,6 +469,7 @@ class _BoardPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    boardPaintCount++;
     final board = layout.boardRect;
     final cell = layout.cell;
 
@@ -445,7 +488,7 @@ class _BoardPainter extends CustomPainter {
       if (sq == selected) {
         canvas.drawRect(
           layout.cellRect(i),
-          Paint()..color = primary.withValues(alpha: 0.22),
+          Paint()..color = deepTone.withValues(alpha: 0.2),
         );
       }
     }
@@ -469,8 +512,9 @@ class _BoardPainter extends CustomPainter {
     for (var i = 0; i < 64; i++) {
       final sq = _squareAt(i);
       final rect = layout.cellRect(i);
-      if (doubts[sq]) _paintDoubt(canvas, rect, cell);
-      if (sq == selected) _paintSelected(canvas, rect, cell);
+      final isSelected = sq == selected;
+      if (isSelected) _paintSelected(canvas, rect, cell);
+      if (doubts[sq]) _paintDoubt(canvas, rect, cell, ringed: isSelected);
       if (sq == cursor) _paintCursor(canvas, rect);
     }
   }
@@ -515,23 +559,34 @@ class _BoardPainter extends CustomPainter {
 
   /// Amber triangle in the top right corner plus a 2 dp amber rule, each edged with a hairline so it reads on
   /// light, mid-tone and hatched squares alike (and the mark is a shape, not only a colour).
-  void _paintDoubt(Canvas canvas, Rect rect, double cell) {
+  /// When [ringed] (the square is also selected) the selection ring owns the edge: only the triangle is drawn,
+  /// inside the ring.
+  void _paintDoubt(
+    Canvas canvas,
+    Rect rect,
+    double cell, {
+    bool ringed = false,
+  }) {
     final thin = cell < 24;
-    final rule = thin ? 1.0 : 2.0;
-    canvas.drawRect(
-      rect.deflate(rule / 2),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = rule
-        ..color = BoardMarks.doubt,
-    );
-    canvas.drawRect(
-      rect.deflate(rule + 0.5),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = BoardMarks.doubtEdge,
-    );
+    var rule = thin ? 1.0 : 2.0;
+    if (ringed) {
+      rule = _selectedWidth(cell) + 2;
+    } else {
+      canvas.drawRect(
+        rect.deflate(rule / 2),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = rule
+          ..color = BoardMarks.doubt,
+      );
+      canvas.drawRect(
+        rect.deflate(rule + 0.5),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = BoardMarks.doubtEdge,
+      );
+    }
     final t = math.max(cell * 0.36, 7.0).clamp(7.0, 22.0);
     final tri = Path()
       ..moveTo(rect.right - t, rect.top + rule)
@@ -549,22 +604,25 @@ class _BoardPainter extends CustomPainter {
     );
   }
 
-  /// 3 dp `primary` rule with a thin `onPrimary` line inside it (readable on any square in both themes).
+  double _selectedWidth(double cell) => cell < 24 ? 2.0 : 3.0;
+
+  /// 3 dp ring in the deep tone of the ink under a 1 dp white outer hairline: the same in both themes, so it
+  /// keeps 3:1 against the light and the dark squares (the dark theme's `primary` is pale).
   void _paintSelected(Canvas canvas, Rect rect, double cell) {
-    final w = cell < 24 ? 2.0 : 3.0;
+    final w = _selectedWidth(cell);
     canvas.drawRect(
-      rect.deflate(w / 2),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = w
-        ..color = primary,
-    );
-    canvas.drawRect(
-      rect.deflate(w + 0.5),
+      rect.deflate(0.5),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1
-        ..color = onPrimary,
+        ..color = BoardMarks.pieceWhite,
+    );
+    canvas.drawRect(
+      rect.deflate(1 + w / 2),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w
+        ..color = deepTone,
     );
   }
 
@@ -586,8 +644,29 @@ class _BoardPainter extends CustomPainter {
     );
   }
 
+  /// Repaints only when something drawn changed. [grid] and [doubts] are copies taken at build time, so a
+  /// Diagram edited in place compares by content. (The catalogue repaints through `repaint: catalog`.)
   @override
-  bool shouldRepaint(_BoardPainter old) => true;
+  bool shouldRepaint(_BoardPainter old) =>
+      layout.side != old.layout.side ||
+      layout.gutter != old.layout.gutter ||
+      selected != old.selected ||
+      pressed != old.pressed ||
+      cursor != old.cursor ||
+      blackAtBottom != old.blackAtBottom ||
+      showCoordinates != old.showCoordinates ||
+      style != old.style ||
+      light != old.light ||
+      dark != old.dark ||
+      hatch != old.hatch ||
+      paper != old.paper ||
+      rule != old.rule ||
+      deepTone != old.deepTone ||
+      labelStyle != old.labelStyle ||
+      !identical(catalog, old.catalog) ||
+      setId != old.setId ||
+      !listEquals(grid, old.grid) ||
+      !listEquals(doubts, old.doubts);
 }
 
 /// Paints a [cells] x [cells] chequered area in [board]: flat squares, or white paper with the dark squares
@@ -711,11 +790,16 @@ class _SetPreviewState extends State<SetPreview> {
     );
     final paint = SizedBox.square(
       dimension: widget.size,
-      child: CustomPaint(painter: painter),
+      child: RepaintBoundary(child: CustomPaint(painter: painter)),
     );
     return widget.semanticLabel == null
         ? ExcludeSemantics(child: paint)
-        : Semantics(label: widget.semanticLabel, image: true, excludeSemantics: true, child: paint);
+        : Semantics(
+            label: widget.semanticLabel,
+            image: true,
+            excludeSemantics: true,
+            child: paint,
+          );
   }
 }
 
@@ -741,6 +825,7 @@ class _SetPreviewPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    boardPaintCount++;
     final board = Offset.zero & size;
     paintBoardSquares(
       canvas,
@@ -772,7 +857,15 @@ class _SetPreviewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SetPreviewPainter old) => true;
+  bool shouldRepaint(_SetPreviewPainter old) =>
+      !identical(catalog, old.catalog) ||
+      setId != old.setId ||
+      style != old.style ||
+      light != old.light ||
+      dark != old.dark ||
+      hatch != old.hatch ||
+      paper != old.paper ||
+      rule != old.rule;
 }
 
 /// One piece on a square of the ink, framed by the 1 dp rule (3 dp `primary` when [selected]). Use it wherever

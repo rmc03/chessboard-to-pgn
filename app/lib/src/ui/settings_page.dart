@@ -22,13 +22,15 @@ class SettingsPage extends StatefulWidget {
   final String appVersion;
 
   /// Pushes the page on the nearest navigator.
-  static Future<void> open(BuildContext context, {required String appVersion}) =>
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => SettingsPage(appVersion: appVersion),
-          settings: const RouteSettings(name: '/ajustes'),
-        ),
-      );
+  static Future<void> open(
+    BuildContext context, {
+    required String appVersion,
+  }) => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => SettingsPage(appVersion: appVersion),
+      settings: const RouteSettings(name: '/ajustes'),
+    ),
+  );
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -73,7 +75,9 @@ class _CompactLayout extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final scheme = Theme.of(context).colorScheme;
     final gutter = Space.gutter(size.width);
-    final side = (size.width * 0.56).clamp(150.0, 232.0).clamp(0.0, size.height * 0.32);
+    final side = (size.width * 0.56)
+        .clamp(150.0, 232.0)
+        .clamp(0.0, size.height * 0.32);
     return Column(
       children: [
         // The preview stays put while the controls scroll under it.
@@ -83,7 +87,9 @@ class _CompactLayout extends StatelessWidget {
             width: double.infinity,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: Space.lg),
-              child: Center(child: _Preview(settings: scope.settings, side: side)),
+              child: Center(
+                child: _Preview(settings: scope.settings, side: side),
+              ),
             ),
           ),
         ),
@@ -309,7 +315,10 @@ class _Section extends StatelessWidget {
     return Semantics(
       header: true,
       child: Padding(
-        padding: const EdgeInsets.only(top: Space.xl + Space.sm, bottom: Space.md),
+        padding: const EdgeInsets.only(
+          top: Space.xl + Space.sm,
+          bottom: Space.md,
+        ),
         child: Text(
           title,
           style: theme.textTheme.titleMedium?.copyWith(
@@ -390,9 +399,11 @@ class _InkSwatch extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // What gets printed: the ink's `primary` in the current brightness (masthead, numerals), not the raw seed.
+    final printed = inkPrimary(ink, theme.brightness);
     final onSeed =
-        contrastRatio(ink.seed, BoardMarks.pieceWhite) >=
-            contrastRatio(ink.seed, BoardMarks.pieceBlack)
+        contrastRatio(printed, BoardMarks.pieceWhite) >=
+            contrastRatio(printed, BoardMarks.pieceBlack)
         ? BoardMarks.pieceWhite
         : BoardMarks.pieceBlack;
     return Semantics(
@@ -430,7 +441,7 @@ class _InkSwatch extends StatelessWidget {
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: ink.seed,
+                      color: printed,
                       border: Border.all(color: scheme.outline, width: 1),
                     ),
                     child: selected
@@ -530,7 +541,9 @@ class _PieceSetTile extends StatelessWidget {
       excludeSemantics: true,
       onTap: onTap,
       child: Material(
-        color: selected ? scheme.secondaryContainer : scheme.surfaceContainerLow,
+        color: selected
+            ? scheme.secondaryContainer
+            : scheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Corner.container),
           side: selected

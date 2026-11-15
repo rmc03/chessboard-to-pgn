@@ -1,4 +1,3 @@
-
 import 'package:chessboard_pgn/src/crop_page.dart';
 import 'package:chessboard_pgn/src/locate.dart';
 import 'package:chessboard_pgn/src/ui/crop_canvas.dart';
@@ -260,7 +259,11 @@ void main() {
       await openCrop(tester);
       expect(find.text('Recortar tablero'), findsOneWidget);
       expect(
-        find.text('Encierra el tablero; no hace falta que sea exacto.'),
+        find.text('Usa la rueda o los botones para ampliar.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Arrastra las esquinas para encerrar el tablero.'),
         findsOneWidget,
       );
       expect(find.text('Restablecer'), findsOneWidget);
@@ -269,7 +272,7 @@ void main() {
     });
 
     testWidgets(
-      'a 1080 x 2400 screenshot fits initially, rectangle 70 % of the short side',
+      'a 1080 x 2400 screenshot fits initially, rectangle 40 % of the width, centred',
       (tester) async {
         final big = Uint8List.fromList(
           img.encodePng(img.Image(width: 1080, height: 2400)),
@@ -283,7 +286,8 @@ void main() {
         expect(shown.right, lessThanOrEqualTo(size.width));
         expect(shown.bottom, lessThanOrEqualTo(size.height));
         expect(c.view.scale, closeTo(c.frame!.fitScale, 1e-9));
-        expect(c.rect.width, closeTo(756, 1e-6));
+        expect(c.rect.width, closeTo(432, 1e-6));
+        expect(c.rect.height, closeTo(432, 1e-6));
         expect(c.rect.center, const Offset(540, 1200));
       },
     );
@@ -727,7 +731,7 @@ void main() {
       },
     );
 
-    testWidgets('zoom buttons are on wide windows only', (tester) async {
+    testWidgets('zoom buttons work on wide windows', (tester) async {
       await openCrop(tester); // 800 dp wide
       expect(find.byKey(const ValueKey('zoom-in')), findsOneWidget);
       final c = ctrl(tester);
@@ -740,10 +744,55 @@ void main() {
       expect(c.scale, closeTo(s, 1e-9));
     });
 
-    testWidgets('no zoom buttons on a phone', (tester) async {
+    testWidgets('phones have the zoom buttons too, and the touch hint', (
+      tester,
+    ) async {
       await openCrop(tester, window: const Size(360, 640));
-      expect(find.byKey(const ValueKey('zoom-in')), findsNothing);
+      expect(find.byKey(const ValueKey('zoom-in')), findsOneWidget);
+      expect(
+        find.text('Pellizca o toca dos veces para ampliar.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Arrastra las esquinas para encerrar el tablero.'),
+        findsOneWidget,
+      );
+      final canvas = tester.getRect(find.byKey(canvasKey));
+      for (final k in ['zoom-in', 'zoom-out', 'zoom-fit']) {
+        final r = tester.getRect(find.byKey(ValueKey(k)));
+        expect(r.size.shortestSide, greaterThanOrEqualTo(48));
+        expect(canvas.contains(r.center), isTrue);
+      }
+      final c = ctrl(tester);
+      final s = c.scale;
+      await tester.tap(find.byKey(const ValueKey('zoom-in')));
+      await tester.pumpAndSettle();
+      expect(c.scale, greaterThan(s));
     });
+
+    testWidgets(
+      'the zoom buttons move to the left when the rectangle nears the bottom right corner',
+      (tester) async {
+        // 400 x 400 image on a 360 x 640 phone: a rectangle in the bottom right of the image
+        await openCrop(
+          tester,
+          window: const Size(360, 640),
+          initial: const Box(250, 250, 395, 395),
+        );
+        final c = ctrl(tester);
+        c.fitView();
+        await tester.pumpAndSettle();
+        final canvas = tester.getRect(find.byKey(canvasKey));
+        final zoom = tester.getRect(find.byKey(const ValueKey('zoom-in')));
+        final sel = c.screenRect.shift(canvas.topLeft);
+        expect(zoom.overlaps(sel.inflate(24)), isFalse);
+        expect(
+          zoom.center.dx,
+          lessThan(canvas.center.dx),
+          reason: 'moved left',
+        );
+      },
+    );
 
     testWidgets('semantics describe the screen and the selection', (
       tester,

@@ -73,7 +73,10 @@ class CropController extends ChangeNotifier {
       final m = CropRectOps.minSide(s);
       if (!r.isEmpty && r.width >= m && r.height >= m) return (r, true);
     }
-    final side = 0.7 * math.min(s.width, s.height);
+    // A tall screenshot (a phone page with the board somewhere in the middle): a smaller square, so the
+    // whole image stays visible around it and the board is not swallowed by an oversized frame.
+    final tall = s.height / s.width > 1.6;
+    final side = tall ? 0.4 * s.width : 0.7 * math.min(s.width, s.height);
     return (
       Rect.fromCenter(center: s.center(Offset.zero), width: side, height: side),
       false,

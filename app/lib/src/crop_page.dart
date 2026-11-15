@@ -6,6 +6,7 @@
 // keyboard focus, semantics.
 import 'dart:ui' as ui;
 
+import 'package:flutter/rendering.dart' show RendererBinding;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
@@ -33,7 +34,7 @@ class CropPage extends StatefulWidget {
   final Uint8List imageBytes;
 
   /// Starting rectangle in image pixels (the view starts zoomed on it); default = a centred square of 70 % of
-  /// the shorter side with the whole image visible.
+  /// the shorter side (40 % of the width on a tall screenshot) with the whole image visible.
   final Box? initial;
 
   @override
@@ -168,7 +169,7 @@ class _Message extends StatelessWidget {
   );
 }
 
-/// The canvas with its semantics and, on wide windows, the zoom buttons.
+/// The canvas with its semantics and the zoom buttons.
 class _Stage extends StatelessWidget {
   const _Stage({
     required this.controller,
@@ -186,7 +187,6 @@ class _Stage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= Breakpoint.medium;
     return Stack(
       children: [
         Positioned.fill(
@@ -220,13 +220,57 @@ class _Stage extends StatelessWidget {
             },
           ),
         ),
-        if (wide)
-          Positioned(
-            right: Space.lg,
-            bottom: Space.lg,
-            child: ListenableBuilder(
-              listenable: controller,
-              builder: (context, _) => Column(
+        _ZoomButtons(controller: controller),
+      ],
+    );
+  }
+}
+
+/// Acercar, alejar and "ver toda la imagen", stacked at the bottom right (phones included). When the
+/// rectangle comes near that corner they move to the bottom left so they never sit on its handles; the side
+/// only changes when the current one collides and the other is free (no flicker). If the rectangle is so large
+/// that both sides collide (zoomed in), the buttons stay where they are: the view can be panned or zoomed out
+/// to reach the handle.
+class _ZoomButtons extends StatefulWidget {
+  const _ZoomButtons({required this.controller});
+
+  final CropController controller;
+
+  @override
+  State<_ZoomButtons> createState() => _ZoomButtonsState();
+}
+
+class _ZoomButtonsState extends State<_ZoomButtons> {
+  static const double _width = 48;
+  static const double _height = 3 * 48 + 2 * Space.sm;
+  static const double _margin = Space.lg;
+  bool _left = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    return LayoutBuilder(
+      builder: (context, box) => ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final size = box.biggest;
+          Rect column(bool left) => Rect.fromLTWH(
+            left ? _margin : size.width - _margin - _width,
+            size.height - _margin - _height,
+            _width,
+            _height,
+          );
+          // 24 dp: the reach of a handle around the rectangle's edge
+          final sel = controller.frame == null
+              ? Rect.zero
+              : controller.screenRect.inflate(24);
+          bool hits(bool left) => sel.overlaps(column(left));
+          if (hits(_left) && !hits(!_left)) _left = !_left;
+          return Align(
+            alignment: _left ? Alignment.bottomLeft : Alignment.bottomRight,
+            child: Padding(
+              padding: const EdgeInsets.all(_margin),
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton.filledTonal(
@@ -256,8 +300,9 @@ class _Stage extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-      ],
+          );
+        },
+      ),
     );
   }
 }
@@ -272,11 +317,27 @@ class _BottomBar extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final wide = MediaQuery.sizeOf(context).width >= Breakpoint.medium;
-    final hint = Text(
-      'Encierra el tablero; no hace falta que sea exacto.',
-      style: theme.textTheme.bodyMedium?.copyWith(
-        color: scheme.onSurfaceVariant,
-      ),
+    // Mouse (or a wide window): wheel and buttons; touch: pinch and double tap.
+    final mouse =
+        wide || RendererBinding.instance.mouseTracker.mouseIsConnected;
+    final hintStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final hint = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          mouse
+              ? 'Usa la rueda o los botones para ampliar.'
+              : 'Pellizca o toca dos veces para ampliar.',
+          style: hintStyle,
+        ),
+        Text(
+          'Arrastra las esquinas para encerrar el tablero.',
+          style: hintStyle,
+        ),
+      ],
     );
     final reset = TextButton(
       key: const ValueKey('crop-reset'),
