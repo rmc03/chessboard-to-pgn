@@ -1,0 +1,7 @@
+[
+  {"id": "merida", "name": "Merida", "author": "Armando Hernandez Marroquin", "license": "GPLv2+", "licenseUrl": "https://www.gnu.org/licenses/gpl-2.0.txt", "source": "https://github.com/lichess-org/lila/tree/master/public/piece/merida"},
+  {"id": "cburnett", "name": "Cburnett", "author": "Colin M.L. Burnett", "license": "GPLv2+", "licenseUrl": "https://www.gnu.org/licenses/gpl-2.0.txt", "source": "https://github.com/lichess-org/lila/tree/master/public/piece/cburnett"},
+  {"id": "chessnut", "name": "Chessnut", "author": "Alexis Luengas", "license": "Apache 2.0", "licenseUrl": "https://github.com/LexLuengas/chessnut-pieces/blob/master/LICENSE.txt", "source": "https://github.com/lichess-org/lila/tree/master/public/piece/chessnut"},
+  {"id": "mpchess", "name": "MP Chess", "author": "Maxime Chupin", "license": "GPLv3+", "licenseUrl": "https://www.gnu.org/licenses/quick-guide-gplv3.en.html", "source": "https://github.com/lichess-org/lila/tree/master/public/piece/mpchess"},
+  {"id": "celtic", "name": "Celta", "author": "Maurizio Monge", "license": "MIT", "licenseUrl": "https://github.com/maurimo/chess-art/blob/main/LICENSE", "source": "https://github.com/lichess-org/lila/tree/master/public/piece/celtic"}
+]

@@ -27,7 +27,35 @@ flutter:
   uses-material-design: true
   assets:
     - assets/model/
+    - assets/pieces/
+    - assets/pieces/merida/
+    - assets/pieces/cburnett/
+    - assets/pieces/chessnut/
+    - assets/pieces/mpchess/
+    - assets/pieces/celtic/
   fonts:
     - family: ChessFigures
       fonts:
         - asset: assets/fonts/ChessFigures.ttf
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Archivo-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Archivo-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Archivo-Bold.ttf
+          weight: 700
+    - family: ArchivoCondensed
+      fonts:
+        - asset: assets/fonts/ArchivoCondensed-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ArchivoCondensed-Bold.ttf
+          weight: 700
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500
