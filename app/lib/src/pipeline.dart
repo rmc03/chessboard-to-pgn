@@ -239,6 +239,17 @@ RecognizedBoard classifyBoard(ModelAssets model, PreparedBoard board) {
   );
 }
 
+// These live at top level on purpose: a closure passed to Isolate.run shares its context with every other
+// closure of the enclosing function, so created inline it would drag the progress callbacks (and whatever
+// they capture, e.g. the Session) into the isolate message.
+Future<PreparedImage> _prepareInIsolate(Uint8List imageBytes) =>
+    Isolate.run(() => prepareImage(imageBytes));
+
+Future<RecognizedBoard> _classifyInIsolate(
+  ModelAssets model,
+  PreparedBoard p,
+) => Isolate.run(() => classifyBoard(model, p));
+
 /// Called once the boards are located: how many, and the size of the image the box coordinates refer to.
 typedef BoardsFoundFn = void Function(int boards, int width, int height);
 
@@ -253,14 +264,14 @@ Future<List<RecognizedBoard>> recognizeImageStreaming(
   BoardsFoundFn? onFound,
   BoardReadFn? onBoard,
 }) async {
-  final prepared = await Isolate.run(() => prepareImage(imageBytes));
+  final prepared = await _prepareInIsolate(imageBytes);
   onFound?.call(prepared.boards.length, prepared.width, prepared.height);
   return Future.wait([
     for (final (i, p)
         in prepared
             .boards
             .indexed) // capture one board, not all of them, in each isolate
-      Isolate.run(() => classifyBoard(model, p)).then((b) {
+      _classifyInIsolate(model, p).then((b) {
         onBoard?.call(i, b);
         return b;
       }),

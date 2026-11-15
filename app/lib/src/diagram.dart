@@ -94,8 +94,10 @@ String describeProblem(String problem) {
     'más de 8 peones negros': 'Hay más de 8 peones negros.',
     'más de 16 piezas blancas': 'Hay más de 16 piezas blancas.',
     'más de 16 piezas negras': 'Hay más de 16 piezas negras.',
-    'hay un peón en la fila 1 u 8': 'Hay un peón en la primera o la última fila.',
-    'el bando que no mueve está en jaque': 'El bando que no mueve está en jaque.',
+    'hay un peón en la fila 1 u 8':
+        'Hay un peón en la primera o la última fila.',
+    'el bando que no mueve está en jaque':
+        'El bando que no mueve está en jaque.',
   };
   final hit = known[problem];
   if (hit != null) return hit;
@@ -112,16 +114,14 @@ class Diagram extends ChangeNotifier {
   Diagram({
     required this.grid,
     required this.confidence,
-    required String turn,
+    required this._turn,
     Set<CastlingRight> castlingSwitchedOff = const {},
     this.box,
     this.fallback = false,
     this.manual = false,
     this.originalCrop,
-    bool seenFromBlack = false,
-  }) : _turn = turn,
-       _castlingOff = {...castlingSwitchedOff},
-       _seenFromBlack = seenFromBlack;
+    this._seenFromBlack = false,
+  }) : _castlingOff = {...castlingSwitchedOff};
 
   factory Diagram.fromRecognized(RecognizedBoard b) => Diagram(
     grid: List<int>.of(b.grid),
@@ -299,7 +299,8 @@ class Diagram extends ChangeNotifier {
 
   /// Old on/off choice, kept for the first UI: false means "no castling" (all four switched off), true means
   /// every right the placement allows. The getter is false only when all four are switched off.
-  bool get castlingPossible => _castlingOff.length < CastlingRight.values.length;
+  bool get castlingPossible =>
+      _castlingOff.length < CastlingRight.values.length;
   set castlingPossible(bool value) {
     final before = castlingField;
     _castlingOff

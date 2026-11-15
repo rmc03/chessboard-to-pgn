@@ -98,7 +98,7 @@ void main() {
 
       await tester.tap(find.textContaining('Copiar PGN'));
       await tester.pumpAndSettle();
-      expect(clipboard, contains('[Event "Diagram 1"]'));
+      expect(clipboard, contains('[Event "Diagrama 1"]'));
       expect(clipboard, contains('[FEN "$sample b - - 0 1"]'));
       expect(clipboard, contains('[SetUp "1"]'));
     },
@@ -289,7 +289,7 @@ void main() {
         await tester.tap(find.text('Guardar .pgn'));
         await tester.pumpAndSettle();
         expect(name, matches(RegExp(r'^diagramas-\d{8}-\d{4}\.pgn$')));
-        expect(content, contains('[Event "Diagram 1"]'));
+        expect(content, contains('[Event "Diagrama 1"]'));
         expect(content, contains('[FEN "'));
         expect(find.textContaining('Guardado: $name'), findsOneWidget);
       },
@@ -319,7 +319,7 @@ void main() {
       expect(find.text('Como archivo .pgn'), findsOneWidget);
       await tester.tap(find.text('Como texto'));
       await tester.pumpAndSettle();
-      expect(text, contains('[Event "Diagram 1"]'));
+      expect(text, contains('[Event "Diagrama 1"]'));
       expect(text, contains('[SetUp "1"]'));
 
       await tester.tap(find.text('Compartir'));
@@ -344,7 +344,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Como texto'));
       await tester.pumpAndSettle();
-      expect(text, contains('[Event "Diagram 1"]'));
+      expect(text, contains('[Event "Diagrama 1"]'));
     });
   });
 }
