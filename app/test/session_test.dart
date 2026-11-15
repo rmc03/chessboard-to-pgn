@@ -50,6 +50,7 @@ List<(SourceStatus, int?, int)> record(Session s, SourceImage src) {
 }
 
 void main() {
+  fallbackRules();
   group('adding captures', () {
     test(
       'the capture shows at once and progress goes found, then read 1..n',
@@ -526,6 +527,96 @@ void main() {
       final src = await s.addImage(Uint8List.fromList([1, 2, 3]));
       expect(src.status, SourceStatus.failed);
       expect(src.errorMessage, isNotEmpty);
+    });
+  });
+}
+
+/// A whole-image fallback board with [doubts] doubtful squares.
+RecognizedBoard fallbackBoard(int doubts) {
+  final grid = placementToGrid(sample);
+  final conf = List<double>.filled(64, 1);
+  for (var i = 0; i < doubts; i++) {
+    conf[i] = 0.4;
+  }
+  return RecognizedBoard(const Box(0, 0, 800, 600), grid, conf, grid, true);
+}
+
+void fallbackRules() {
+  group('whole-image fallback', () {
+    test('16 or more doubtful squares: the capture ends as noBoards with no diagram', () async {
+      final s = Session(readImage: (bytes, {onFound, onBoard}) async {
+        final boards = [fallbackBoard(16)];
+        onFound?.call(1, 800, 600);
+        onBoard?.call(0, boards.first);
+        return boards;
+      });
+      final seen = <int>[];
+      s.addListener(() => seen.add(s.diagramCount));
+      final src = await s.addImage(bytesA);
+      expect(src.status, SourceStatus.noBoards);
+      expect(src.diagrams, isEmpty);
+      expect(s.diagramCount, 0);
+      expect(src.found, 0);
+      expect(seen.where((n) => n > 0), isEmpty, reason: 'it never flashes in as a diagram first');
+      expect(src.skeletons, 0);
+      expect(src.progressText, isNull);
+    });
+
+    test('15 doubtful squares: still a plausible reading, kept', () async {
+      final s = Session(readImage: (bytes, {onFound, onBoard}) async {
+        final boards = [fallbackBoard(15)];
+        onFound?.call(1, 800, 600);
+        onBoard?.call(0, boards.first);
+        return boards;
+      });
+      final src = await s.addImage(bytesA);
+      expect(src.status, SourceStatus.done);
+      expect(src.diagrams.single.fallback, isTrue);
+    });
+
+    test('the rule does not apply to a framed board, however doubtful', () async {
+      final grid = placementToGrid(sample);
+      final framed = RecognizedBoard(const Box(0, 0, 100, 100), grid, List<double>.filled(64, 0.3), grid, false);
+      final s = Session(readImage: (bytes, {onFound, onBoard}) async {
+        onFound?.call(1, 800, 600);
+        onBoard?.call(0, framed);
+        return [framed];
+      });
+      final src = await s.addImage(bytesA);
+      expect(src.status, SourceStatus.done);
+      expect(src.diagrams, hasLength(1));
+    });
+
+    test('nor when the fallback is one of several boards', () async {
+      final s = Session(readImage: (bytes, {onFound, onBoard}) async {
+        final boards = [board(sample), fallbackBoard(20)];
+        onFound?.call(2, 800, 600);
+        for (final (i, b) in boards.indexed) {
+          onBoard?.call(i, b);
+        }
+        return boards;
+      });
+      final src = await s.addImage(bytesA);
+      expect(src.status, SourceStatus.done);
+      expect(src.diagrams, hasLength(2));
+    });
+
+    test('a hand-drawn region still turns the capture into done', () async {
+      final s = Session(
+        readImage: (bytes, {onFound, onBoard}) async => [fallbackBoard(30)],
+        readRegion: (bytes, region) async => board(sample),
+      );
+      final src = await s.addImage(bytesA);
+      expect(src.status, SourceStatus.noBoards);
+      await s.readRegion(src, const Box(0, 0, 10, 10));
+      expect(src.status, SourceStatus.done);
+      expect(src.diagrams, hasLength(1));
+    });
+
+    test('implausibleFallback is exactly "fallback and 16 doubts"', () {
+      expect(implausibleFallback(fallbackBoard(16)), isTrue);
+      expect(implausibleFallback(fallbackBoard(15)), isFalse);
+      expect(implausibleFallback(board(sample, conf: 0.1)), isFalse);
     });
   });
 }

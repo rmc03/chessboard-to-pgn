@@ -326,10 +326,11 @@ ThemeData buildTheme(SpotInk ink, Brightness brightness) {
       backgroundColor: scheme.primary,
       foregroundColor: scheme.onPrimary,
       focusColor: scheme.onPrimary.withValues(alpha: 0.24),
-      elevation: 3,
-      focusElevation: 3,
-      hoverElevation: 4,
-      highlightElevation: 3,
+      // Tonal, no shadow (the direction contract): the ink fill separates it from the page.
+      elevation: 0,
+      focusElevation: 0,
+      hoverElevation: 0,
+      highlightElevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Corner.fab),
       ),
@@ -416,8 +417,12 @@ ThemeData buildTheme(SpotInk ink, Brightness brightness) {
     popupMenuTheme: PopupMenuThemeData(
       color: scheme.surfaceContainer,
       surfaceTintColor: Colors.transparent,
-      shape: controlShape,
-      elevation: 3,
+      // Tonal, no shadow: a 1 dp rule in the ink's neutral edges the menu instead.
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Corner.control),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      elevation: 0,
       textStyle: text.bodyLarge?.copyWith(color: scheme.onSurface),
     ),
     tooltipTheme: TooltipThemeData(

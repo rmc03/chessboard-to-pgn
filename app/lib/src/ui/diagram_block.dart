@@ -23,7 +23,7 @@ const double blockMaxWidth = 440;
 const double _pad = Space.lg;
 const double _headerHeight = 52;
 
-enum _Menu { copyPgn, share, rotate, adjust, delete }
+enum _Menu { review, copyPgn, share, rotate, adjust, delete }
 
 class DiagramBlock extends StatefulWidget {
   const DiagramBlock({
@@ -113,6 +113,8 @@ class _DiagramBlockState extends State<DiagramBlock> {
 
   void _onMenu(_Menu item) {
     switch (item) {
+      case _Menu.review:
+        unawaited(_review());
       case _Menu.copyPgn:
         unawaited(_actions.copy(context, _session.pgnOf(_d), 'PGN copiado'));
       case _Menu.share:
@@ -163,12 +165,19 @@ class _DiagramBlockState extends State<DiagramBlock> {
     final status = _d.status;
     final source = _session.sourceOf(_d);
     final canAdjust =
-        source != null && !source.isPending && !_actions.isReadingRegion(source);
+        source != null &&
+        !source.isPending &&
+        !_actions.isReadingRegion(source);
 
     return LayoutBuilder(
       builder: (context, c) {
         final side = c.maxWidth;
+        // In a row of blocks the surface is stretched to the tallest one: the actions and the FEN sit at the
+        // bottom so they line up across the row; what is optional above them (a forced-turn line, castling
+        // chips) only moves the slack.
+        final stretched = c.hasBoundedHeight;
         return Column(
+          mainAxisSize: stretched ? MainAxisSize.max : MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _header(context, status, canAdjust),
@@ -184,7 +193,8 @@ class _DiagramBlockState extends State<DiagramBlock> {
                   ButtonSegment(value: true, label: Text('Original')),
                 ],
                 selected: {_showOriginal},
-                onSelectionChanged: (s) => setState(() => _showOriginal = s.first),
+                onSelectionChanged: (s) =>
+                    setState(() => _showOriginal = s.first),
               ),
               const SizedBox(height: Space.md),
             ],
@@ -193,6 +203,7 @@ class _DiagramBlockState extends State<DiagramBlock> {
             _turn(context),
             _castling(context),
             const SizedBox(height: Space.md),
+            if (stretched) const Spacer(),
             Wrap(
               spacing: Space.sm,
               runSpacing: Space.xs,
@@ -204,7 +215,8 @@ class _DiagramBlockState extends State<DiagramBlock> {
                   label: const Text('Analizar en Lichess'),
                 ),
                 TextButton(
-                  onPressed: () => unawaited(_actions.copy(context, _d.fen, 'FEN copiado')),
+                  onPressed: () =>
+                      unawaited(_actions.copy(context, _d.fen, 'FEN copiado')),
                   child: const Text('Copiar FEN'),
                 ),
               ],
@@ -223,10 +235,6 @@ class _DiagramBlockState extends State<DiagramBlock> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final app = context.app;
-    final text = theme.textTheme;
-    final hasProblems = status.hasProblems;
-    final doubtful = _d.hasDoubts;
-
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: _headerHeight),
       child: Row(
@@ -239,95 +247,150 @@ class _DiagramBlockState extends State<DiagramBlock> {
             ),
           ),
           const SizedBox(width: Space.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (hasProblems)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Space.xs),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.error_outline, size: 20, color: scheme.error),
-                        const SizedBox(width: Space.sm),
-                        Expanded(
-                          child: Text(
-                            status.problemText!,
-                            style: text.bodyMedium?.copyWith(color: scheme.error),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (doubtful)
-                  Semantics(
-                    button: true,
-                    label: '${status.doubtfulText}. Revisar dudosas',
-                    excludeSemantics: true,
-                    child: InkWell(
-                      key: const ValueKey('review-doubtful'),
-                      onTap: () => unawaited(_review()),
-                      borderRadius: BorderRadius.circular(Corner.control),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: minTarget),
-                        child: Row(
-                          children: [
-                            Icon(Icons.warning_amber_rounded, size: 20, color: app.warning),
-                            const SizedBox(width: Space.sm),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    status.doubtfulText!,
-                                    style: text.bodyMedium?.copyWith(color: app.warning),
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          'Revisar dudosas',
-                                          style: text.labelLarge?.copyWith(color: scheme.primary),
-                                        ),
-                                      ),
-                                      Icon(Icons.chevron_right, size: 18, color: scheme.primary),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          Expanded(child: _status(context, status)),
           PopupMenuButton<_Menu>(
             tooltip: 'Más opciones',
             icon: const Icon(Icons.more_vert),
             onSelected: _onMenu,
             itemBuilder: (context) => [
+              if (_d.hasDoubts)
+                _item(
+                  _Menu.review,
+                  Icons.warning_amber_rounded,
+                  'Revisar dudosas',
+                ),
               _item(_Menu.copyPgn, Icons.content_copy, 'Copiar PGN'),
               if (widget.actions.canShare)
-                _item(_Menu.share, Icons.share_outlined, 'Compartir este diagrama'),
+                _item(
+                  _Menu.share,
+                  Icons.share_outlined,
+                  'Compartir este diagrama',
+                ),
               _item(
                 _Menu.rotate,
                 Icons.flip,
-                _d.seenFromBlack ? 'Ver desde las blancas' : 'Ver desde las negras',
+                _d.seenFromBlack
+                    ? 'Ver desde las blancas'
+                    : 'Ver desde las negras',
                 checked: _d.seenFromBlack,
               ),
-              _item(_Menu.adjust, Icons.crop, 'Ajustar recorte', enabled: canAdjust),
+              _item(
+                _Menu.adjust,
+                Icons.crop,
+                'Ajustar recorte',
+                enabled: canAdjust,
+              ),
               const PopupMenuDivider(),
               _item(_Menu.delete, Icons.delete_outline, 'Eliminar'),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// Two lines, always: the headline and what to do or why, so the boards of a row of blocks line up.
+  ///  * impossible: "Posición imposible" and the first reason (the full text is the tooltip);
+  ///  * doubtful: "2 casillas dudosas" and the "Revisar dudosas" entry;
+  ///  * nothing when the reading is fine.
+  Widget _status(BuildContext context, DiagramStatus status) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final app = context.app;
+    final text = theme.textTheme;
+
+    if (status.hasProblems) {
+      final rest = status.problems.length - 1;
+      final reason =
+          '${status.problems.first}${rest > 0 ? ' Y $rest más.' : ''}';
+      return Tooltip(
+        message: status.problemText!,
+        child: Semantics(
+          label: status.problemText,
+          excludeSemantics: true,
+          child: Row(
+            children: [
+              Icon(Icons.error_outline, size: 20, color: scheme.error),
+              const SizedBox(width: Space.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Posición imposible',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodyMedium?.copyWith(color: scheme.error),
+                    ),
+                    Text(
+                      reason,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (!_d.hasDoubts) return const SizedBox.shrink();
+    return Semantics(
+      button: true,
+      label: '${status.doubtfulText}. Revisar dudosas',
+      excludeSemantics: true,
+      child: InkWell(
+        key: const ValueKey('review-doubtful'),
+        onTap: () => unawaited(_review()),
+        borderRadius: BorderRadius.circular(Corner.control),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: minTarget),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 20, color: app.warning),
+              const SizedBox(width: Space.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      status.doubtfulText!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodyMedium?.copyWith(color: app.warning),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Revisar dudosas',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.labelLarge?.copyWith(
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -355,7 +418,11 @@ class _DiagramBlockState extends State<DiagramBlock> {
   );
 
   /// The reader found no frame and used the whole image.
-  Widget _fallbackNote(BuildContext context, SourceImage? source, bool canAdjust) {
+  Widget _fallbackNote(
+    BuildContext context,
+    SourceImage? source,
+    bool canAdjust,
+  ) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Column(
@@ -366,13 +433,19 @@ class _DiagramBlockState extends State<DiagramBlock> {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Icon(Icons.info_outline, size: 18, color: scheme.onSurfaceVariant),
+              child: Icon(
+                Icons.info_outline,
+                size: 18,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: Space.sm),
             Expanded(
               child: Text(
                 'No se encontró el marco del tablero; se leyó la imagen entera.',
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
@@ -382,7 +455,9 @@ class _DiagramBlockState extends State<DiagramBlock> {
           child: TextButton.icon(
             key: const ValueKey('fallback-crop'),
             onPressed: canAdjust && source != null
-                ? () => unawaited(_actions.cropByHand(context, source, replacing: _d))
+                ? () => unawaited(
+                    _actions.cropByHand(context, source, replacing: _d),
+                  )
                 : null,
             icon: const Icon(Icons.crop),
             label: const Text('Recortar a mano'),
@@ -401,9 +476,15 @@ class _DiagramBlockState extends State<DiagramBlock> {
     return GestureDetector(
       // Press and hold shows the original while held; the squares' own taps lose the arena to it, so a hold
       // never edits a square.
-      onLongPressStart: crop == null ? null : (_) => setState(() => _peek = true),
-      onLongPressEnd: crop == null ? null : (_) => setState(() => _peek = false),
-      onLongPressCancel: crop == null ? null : () => setState(() => _peek = false),
+      onLongPressStart: crop == null
+          ? null
+          : (_) => setState(() => _peek = true),
+      onLongPressEnd: crop == null
+          ? null
+          : (_) => setState(() => _peek = false),
+      onLongPressCancel: crop == null
+          ? null
+          : () => setState(() => _peek = false),
       child: SizedBox.square(
         key: _boardKey,
         dimension: side,
@@ -482,13 +563,19 @@ class _DiagramBlockState extends State<DiagramBlock> {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Icon(Icons.lock_outline, size: 16, color: scheme.onSurfaceVariant),
+                  child: Icon(
+                    Icons.lock_outline,
+                    size: 16,
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(width: Space.sm),
                 Expanded(
                   child: Text(
                     reason,
-                    style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -546,11 +633,17 @@ class _DiagramBlockState extends State<DiagramBlock> {
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.ellipsis,
-                  style: context.app.mono.copyWith(color: scheme.onSurfaceVariant),
+                  style: context.app.mono.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               const SizedBox(width: Space.sm),
-              Icon(Icons.content_copy, size: 18, color: scheme.onSurfaceVariant),
+              Icon(
+                Icons.content_copy,
+                size: 18,
+                color: scheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),
@@ -559,29 +652,29 @@ class _DiagramBlockState extends State<DiagramBlock> {
   }
 }
 
-/// The disc of the turn control: hollow for White, solid for Black, in the colour of the segment's text.
+/// The disc of the turn control: White's is white, Black's is black, in any theme (it is a piece colour, not a
+/// text colour), each with a ring that keeps it visible on light and dark segments.
 class _Disc extends StatelessWidget {
   const _Disc({required this.filled});
 
   final bool filled;
 
   @override
-  Widget build(BuildContext context) {
-    final color =
-        IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface;
-    return ExcludeSemantics(
-      child: SizedBox.square(
-        dimension: 18,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: filled ? color : null,
-            border: Border.all(color: color, width: 2),
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: SizedBox.square(
+      dimension: 18,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: filled ? BoardMarks.pieceBlack : BoardMarks.pieceWhite,
+          border: Border.all(
+            color: filled ? BoardMarks.pieceWhite : BoardMarks.pieceBlack,
+            width: 2,
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 // ------------------------------------------------------------------------------------------------ skeleton
@@ -602,9 +695,10 @@ class _DiagramSkeletonState extends State<DiagramSkeleton>
     vsync: this,
     duration: const Duration(milliseconds: 1100),
   );
-  late final Animation<double> _opacity = Tween<double>(begin: 0.5, end: 1).animate(
-    CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
-  );
+  late final Animation<double> _opacity = Tween<double>(
+    begin: 0.5,
+    end: 1,
+  ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
 
   @override
   void didChangeDependencies() {
@@ -623,13 +717,14 @@ class _DiagramSkeletonState extends State<DiagramSkeleton>
     super.dispose();
   }
 
-  Widget _bar(BuildContext context, double height, {double? width}) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(Corner.control),
-    ),
-    child: SizedBox(height: height, width: width),
-  );
+  Widget _bar(BuildContext context, double height, {double? width}) =>
+      DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(Corner.control),
+        ),
+        child: SizedBox(height: height, width: width),
+      );
 
   @override
   Widget build(BuildContext context) {

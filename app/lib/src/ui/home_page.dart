@@ -262,7 +262,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  static double _sidePadding(double width) => (width - _contentWidth(width)) / 2;
+  static double _sidePadding(double width) =>
+      (width - _contentWidth(width)) / 2;
 
   Widget _list(BuildContext context, {required bool floatingFab}) {
     final padding = MediaQuery.paddingOf(context);
@@ -395,7 +396,10 @@ class _CaptureHeader extends StatelessWidget {
     final progressLine = readingRegion ? 'Leyendo el recorte…' : progress;
 
     return Padding(
-      padding: EdgeInsets.only(top: first ? Space.sm : Space.lg, bottom: Space.sm),
+      padding: EdgeInsets.only(
+        top: first ? Space.sm : Space.lg,
+        bottom: Space.sm,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -407,7 +411,9 @@ class _CaptureHeader extends StatelessWidget {
                   child: Semantics(
                     header: true,
                     child: Text(
-                      done ? '${source.title} · ${source.diagramCountText}' : source.title,
+                      done
+                          ? '${source.title} · ${source.diagramCountText}'
+                          : source.title,
                       style: text.titleMedium,
                     ),
                   ),
@@ -454,7 +460,9 @@ class _CaptureHeader extends StatelessWidget {
               liveRegion: true,
               child: Text(
                 progressLine,
-                style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                style: text.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
             const SizedBox(height: Space.sm),
@@ -494,7 +502,8 @@ class _StatusStrip extends StatelessWidget {
     final bg = failed ? scheme.errorContainer : scheme.surfaceContainerHigh;
     final fg = failed ? scheme.onErrorContainer : scheme.onSurface;
     final message = failed
-        ? source.errorMessage ?? 'No se pudo leer esta captura. Inténtalo de nuevo.'
+        ? source.errorMessage ??
+              'No se pudo leer esta captura. Inténtalo de nuevo.'
         : 'No se encontró ningún tablero en esta captura.';
     final busy = actions.isReadingRegion(source);
     return DecoratedBox(
@@ -510,7 +519,10 @@ class _StatusStrip extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(failed ? Icons.error_outline : Icons.search_off, color: fg),
+                Icon(
+                  failed ? Icons.error_outline : Icons.search_off,
+                  color: fg,
+                ),
                 const SizedBox(width: Space.md),
                 Expanded(
                   child: Text(
@@ -571,7 +583,7 @@ class _EmptyState extends StatelessWidget {
         final wide = width >= Breakpoint.expanded;
         final gutter = Space.gutter(width);
         final example = _Example(maxSide: wide ? 440 : 400);
-        final guide = _Guide(onPick: onPick);
+        final guide = _Guide(onPick: onPick, wide: wide);
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
             math.max(gutter, padding.left),
@@ -579,26 +591,45 @@ class _EmptyState extends StatelessWidget {
             math.max(gutter, padding.right),
             Space.xl + padding.bottom,
           ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: wide ? 1000 : 440),
-              child: wide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(child: Align(alignment: Alignment.centerRight, child: example)),
-                        const SizedBox(width: Space.xxl + Space.lg),
-                        Expanded(child: Align(alignment: Alignment.centerLeft, child: guide)),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        example,
-                        const SizedBox(height: Space.xl),
-                        guide,
-                      ],
-                    ),
+          child: ConstrainedBox(
+            // centred in the window when it is taller than the content
+            constraints: BoxConstraints(
+              minHeight: math.max(
+                0,
+                c.maxHeight - Space.lg - Space.xl - padding.bottom,
+              ),
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: wide ? 1000 : 440),
+                child: wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: example,
+                            ),
+                          ),
+                          const SizedBox(width: Space.xxl + Space.lg),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: guide,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          example,
+                          const SizedBox(height: Space.xl),
+                          guide,
+                        ],
+                      ),
+              ),
             ),
           ),
         );
@@ -637,14 +668,23 @@ class _Example extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text('1', style: app.numeral.copyWith(color: scheme.primary)),
+                      Text(
+                        '1',
+                        style: app.numeral.copyWith(color: scheme.primary),
+                      ),
                       const SizedBox(width: Space.md),
-                      Icon(Icons.warning_amber_rounded, size: 20, color: app.warning),
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 20,
+                        color: app.warning,
+                      ),
                       const SizedBox(width: Space.sm),
                       Expanded(
                         child: Text(
                           '2 casillas dudosas',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: app.warning),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: app.warning,
+                          ),
                         ),
                       ),
                     ],
@@ -669,9 +709,10 @@ class _Example extends StatelessWidget {
 }
 
 class _Guide extends StatelessWidget {
-  const _Guide({required this.onPick});
+  const _Guide({required this.onPick, required this.wide});
 
   final VoidCallback onPick;
+  final bool wide;
 
   static const _steps = [
     'Haz una captura de la página',
@@ -691,7 +732,10 @@ class _Guide extends StatelessWidget {
         children: [
           Semantics(
             header: true,
-            child: Text('Pasa los diagramas de tus libros a PGN', style: text.headlineSmall),
+            child: Text(
+              'Pasa tus diagramas a PGN',
+              style: wide ? text.headlineMedium : text.headlineSmall,
+            ),
           ),
           const SizedBox(height: Space.lg),
           for (final (i, step) in _steps.indexed)
@@ -704,7 +748,9 @@ class _Guide extends StatelessWidget {
                     child: ExcludeSemantics(
                       child: Text(
                         '${i + 1}',
-                        style: context.app.masthead.copyWith(color: scheme.primary),
+                        style: context.app.masthead.copyWith(
+                          color: scheme.primary,
+                        ),
                       ),
                     ),
                   ),
@@ -721,12 +767,18 @@ class _Guide extends StatelessWidget {
           const SizedBox(height: Space.lg),
           Row(
             children: [
-              Icon(Icons.lock_outline, size: 16, color: scheme.onSurfaceVariant),
+              Icon(
+                Icons.lock_outline,
+                size: 16,
+                color: scheme.onSurfaceVariant,
+              ),
               const SizedBox(width: Space.sm),
               Expanded(
                 child: Text(
                   'Todo se procesa en el dispositivo.',
-                  style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  style: text.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],

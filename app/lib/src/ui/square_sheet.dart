@@ -120,11 +120,16 @@ class _SquareSheetState extends State<SquareSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Casilla ${squareName(_square)}', style: text.titleLarge),
+                        Text(
+                          'Casilla ${squareName(_square)}',
+                          style: text.titleLarge,
+                        ),
                         const SizedBox(height: Space.xs),
                         Text(
                           'Se leyó: ${pieceNames[current]}',
-                          style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                          style: text.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -137,7 +142,11 @@ class _SquareSheetState extends State<SquareSheet> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.warning_amber_rounded, size: 18, color: warning),
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 18,
+                          color: warning,
+                        ),
                         const SizedBox(width: Space.xs),
                         Text(
                           'Dudosa $_step de $_total',
@@ -151,9 +160,16 @@ class _SquareSheetState extends State<SquareSheet> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.warning_amber_rounded, size: 18, color: warning),
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 18,
+                        color: warning,
+                      ),
                       const SizedBox(width: Space.xs),
-                      Text('Dudosa', style: text.labelLarge?.copyWith(color: warning)),
+                      Text(
+                        'Dudosa',
+                        style: text.labelLarge?.copyWith(color: warning),
+                      ),
                     ],
                   ),
                 ],
@@ -163,7 +179,10 @@ class _SquareSheetState extends State<SquareSheet> {
             LayoutBuilder(
               builder: (context, c) {
                 const gap = Space.sm;
-                final tile = ((c.maxWidth - 5 * gap) / 6).clamp(minTarget, 64.0);
+                final tile = ((c.maxWidth - 5 * gap) / 6).clamp(
+                  minTarget,
+                  64.0,
+                );
                 return Column(
                   children: [
                     _PieceRow(
@@ -171,7 +190,8 @@ class _SquareSheetState extends State<SquareSheet> {
                       size: tile,
                       gap: gap,
                       current: current,
-                      onPick: (cls) => _resolve(() => _d.setSquare(_square, cls)),
+                      onPick: (cls) =>
+                          _resolve(() => _d.setSquare(_square, cls)),
                     ),
                     const SizedBox(height: gap),
                     _PieceRow(
@@ -179,7 +199,8 @@ class _SquareSheetState extends State<SquareSheet> {
                       size: tile,
                       gap: gap,
                       current: current,
-                      onPick: (cls) => _resolve(() => _d.setSquare(_square, cls)),
+                      onPick: (cls) =>
+                          _resolve(() => _d.setSquare(_square, cls)),
                     ),
                   ],
                 );
@@ -199,11 +220,11 @@ class _SquareSheetState extends State<SquareSheet> {
                 if (doubtful) ...[
                   const SizedBox(width: Space.sm),
                   Expanded(
-                    child: FilledButton.icon(
+                    child: FilledButton(
                       key: const ValueKey('confirm-square'),
-                      onPressed: () => _resolve(() => _d.confirmSquare(_square)),
-                      icon: const Icon(Icons.check),
-                      label: const Text('Está bien'),
+                      onPressed: () =>
+                          _resolve(() => _d.confirmSquare(_square)),
+                      child: const Text('Está bien'),
                     ),
                   ),
                 ],
@@ -244,7 +265,12 @@ class _PieceRow extends StatelessWidget {
           child: InkWell(
             key: ValueKey('pick-$cls'),
             onTap: () => onPick(cls),
-            child: PieceTile(cls, size: size, selected: cls == current, dark: i.isOdd),
+            child: PieceTile(
+              cls,
+              size: size,
+              selected: cls == current,
+              dark: i.isOdd,
+            ),
           ),
         ),
       ],

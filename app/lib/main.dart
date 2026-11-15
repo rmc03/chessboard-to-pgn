@@ -70,8 +70,7 @@ class ChessPgnApp extends StatefulWidget {
   State<ChessPgnApp> createState() => _ChessPgnAppState();
 }
 
-class _ChessPgnAppState extends State<ChessPgnApp>
-    with WidgetsBindingObserver {
+class _ChessPgnAppState extends State<ChessPgnApp> with WidgetsBindingObserver {
   late final AppSettings _settings = widget.settings ?? AppSettings();
   late final Session _session = widget.session ?? Session();
   late final PieceSetCatalog _catalog =
@@ -81,9 +80,11 @@ class _ChessPgnAppState extends State<ChessPgnApp>
   String? _themedInk;
   late ThemeData _light, _dark;
 
-  bool _systemReducesMotion() =>
-      WidgetsBinding.instance.platformDispatcher.accessibilityFeatures
-          .disableAnimations;
+  bool _systemReducesMotion() => WidgetsBinding
+      .instance
+      .platformDispatcher
+      .accessibilityFeatures
+      .disableAnimations;
 
   @override
   void initState() {
@@ -131,9 +132,7 @@ class _ChessPgnAppState extends State<ChessPgnApp>
           darkTheme: _dark,
           themeMode: _settings.themeMode,
           // Re-inking is a ~200 ms theme lerp; the system's "remove animations" turns it into a cut.
-          themeAnimationDuration: _reduceMotion
-              ? Duration.zero
-              : Motion.medium,
+          themeAnimationDuration: _reduceMotion ? Duration.zero : Motion.medium,
           themeAnimationCurve: Motion.standard,
           locale: SpanishMaterialLocalizations.locale,
           supportedLocales: const [SpanishMaterialLocalizations.locale],

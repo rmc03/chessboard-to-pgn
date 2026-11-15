@@ -18,8 +18,11 @@ import 'tokens.dart';
 typedef ImageSourceFn = Future<Uint8List?> Function();
 
 /// Lets the user frame a board by hand; null when cancelled. [initial] is in image pixels.
-typedef CropRegionFn =
-    Future<Box?> Function(BuildContext context, Uint8List bytes, Box? initial);
+typedef CropRegionFn = Future<Box?> Function(
+  BuildContext context,
+  Uint8List bytes,
+  Box? initial,
+);
 
 Future<Box?> defaultCropRegion(
   BuildContext context,
@@ -66,6 +69,7 @@ class HomeActions extends ChangeNotifier {
   /// Called with each capture the user adds, so the screen can scroll to its group.
   void Function(SourceImage source)? onCaptureAdded;
 
+  bool _picking = false;
   final Set<SourceImage> _readingRegion = {};
 
   /// A hand-drawn region of [source] is being read.
@@ -98,8 +102,10 @@ class HomeActions extends ChangeNotifier {
   /// Opens the picker; the chosen image becomes a new capture at the end of the session. Cancelling changes
   /// nothing.
   Future<void> pick(BuildContext context) async {
+    if (_picking) return; // a double tap must not open a second picker
     final messenger = ScaffoldMessenger.of(context);
     final Uint8List? bytes;
+    _picking = true;
     try {
       bytes = await _pickImage();
     } catch (_) {
@@ -113,6 +119,8 @@ class HomeActions extends ChangeNotifier {
         },
       );
       return;
+    } finally {
+      _picking = false;
     }
     if (bytes == null) return;
     final source = session.enqueueImage(bytes);
@@ -149,7 +157,9 @@ class HomeActions extends ChangeNotifier {
         e.message,
         action: 'Recortar a mano',
         onAction: () {
-          if (context.mounted) unawaited(cropByHand(context, source, replacing: replacing));
+          if (context.mounted) {
+            unawaited(cropByHand(context, source, replacing: replacing));
+          }
         },
       );
     } finally {
@@ -160,7 +170,11 @@ class HomeActions extends ChangeNotifier {
 
   // ------------------------------------------------------------------- output
 
-  Future<void> copy(BuildContext context, String text, String confirmation) async {
+  Future<void> copy(
+    BuildContext context,
+    String text,
+    String confirmation,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     await Clipboard.setData(ClipboardData(text: text));
     toast(messenger, confirmation);

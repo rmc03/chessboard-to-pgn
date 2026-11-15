@@ -52,7 +52,8 @@ class ExportBar extends StatelessWidget {
           if (labelled)
             TextButton.icon(
               key: const ValueKey('share-all'),
-              onPressed: () => unawaited(actions.share(context, actions.session.allPgn)),
+              onPressed: () =>
+                  unawaited(actions.share(context, actions.session.allPgn)),
               icon: const Icon(Icons.share_outlined),
               label: const Text('Compartir'),
             )
@@ -60,7 +61,8 @@ class ExportBar extends StatelessWidget {
             IconButton(
               key: const ValueKey('share-all'),
               tooltip: 'Compartir',
-              onPressed: () => unawaited(actions.share(context, actions.session.allPgn)),
+              onPressed: () =>
+                  unawaited(actions.share(context, actions.session.allPgn)),
               icon: const Icon(Icons.share_outlined),
             ),
         ],

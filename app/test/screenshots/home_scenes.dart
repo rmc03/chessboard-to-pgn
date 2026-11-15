@@ -27,7 +27,7 @@ enum Capture {
   /// A single clean board.
   one(2),
 
-  /// Four boards located, two read, the rest never arrive (the capture stays in "Leyendo 2 de 4…").
+  /// Four boards located, one read, the rest never arrive (the capture stays in "Leyendo 2 de 4…").
   stuck(3),
 
   /// The reader throws.
@@ -90,7 +90,9 @@ List<RecognizedBoard> _three() {
 }
 
 RecognizedBoard _castlingBoard() {
-  final grid = placementToGrid('r3k2r/ppp2ppp/5n2/1B2p3/4P3/2N2N2/PPPP1PPP/R1BQK2R');
+  final grid = placementToGrid(
+    'r3k2r/ppp2ppp/5n2/1B2p3/4P3/2N2N2/PPPP1PPP/R1BQK2R',
+  );
   return RecognizedBoard(
     const Box(0, 0, 100, 100),
     grid,
@@ -125,8 +127,8 @@ Future<List<RecognizedBoard>> _read(
       final boards = _three();
       onFound?.call(4, 800, 1200);
       onBoard?.call(0, boards[0]);
-      onBoard?.call(1, boards[1]);
-      return Completer<List<RecognizedBoard>>().future; // never finishes: the capture stays "reading"
+      return Completer<List<RecognizedBoard>>()
+          .future; // never finishes: the capture stays "reading"
     case 4:
       throw Exception('boom');
     case 5:
@@ -159,15 +161,22 @@ Future<void> _add(WidgetTester tester, List<Capture> captures) async {
   }
 }
 
-SceneSetup _session(List<Capture> captures, [Future<void> Function(WidgetTester)? then]) =>
-    (tester, env) async {
-      await _prepare(tester);
-      await _add(tester, captures);
-      await then?.call(tester);
-    };
+SceneSetup _session(
+  List<Capture> captures, [
+  Future<void> Function(WidgetTester)? then,
+]) => (tester, env) async {
+  await _prepare(tester);
+  await _add(tester, captures);
+  await then?.call(tester);
+};
 
 void registerHomeScenes() {
-  registerScene('home_empty', (env) => _home(), readImage: _read, setup: (t, e) => _prepare(t));
+  registerScene(
+    'home_empty',
+    (env) => _home(),
+    readImage: _read,
+    setup: (t, e) => _prepare(t),
+  );
 
   registerScene(
     'home_session',
@@ -191,6 +200,7 @@ void registerHomeScenes() {
     (env) => _home(),
     readImage: _read,
     setup: _session([Capture.one, Capture.stuck]),
+    desktopSize: const Size(1280, 1000),
   );
 
   registerScene(

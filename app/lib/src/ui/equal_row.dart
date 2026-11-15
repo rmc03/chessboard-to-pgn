@@ -58,7 +58,9 @@ class _RenderEqualHeightRow extends RenderBox
 
   @override
   void setupParentData(RenderBox child) {
-    if (child.parentData is! _RowParentData) child.parentData = _RowParentData();
+    if (child.parentData is! _RowParentData) {
+      child.parentData = _RowParentData();
+    }
   }
 
   double _cellWidth(double maxWidth) =>
@@ -85,7 +87,10 @@ class _RenderEqualHeightRow extends RenderBox
     var x = 0.0;
     for (var c = firstChild; c != null; c = childAfter(c)) {
       if (c.size.height != tallest) {
-        c.layout(BoxConstraints.tight(Size(cell, tallest)), parentUsesSize: true);
+        c.layout(
+          BoxConstraints.tight(Size(cell, tallest)),
+          parentUsesSize: true,
+        );
       }
       (c.parentData! as _RowParentData).offset = Offset(x, 0);
       x += cell + _gap;
