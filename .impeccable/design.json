@@ -1,0 +1,373 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-16T01:30:23Z",
+  "title": "Design System: Chess to PGN",
+  "extensions": {
+    "colorMeta": {
+      "park-bench-green": {
+        "role": "primary",
+        "displayName": "Park-Bench Green",
+        "canonical": "#1f5c46",
+        "tonalRamp": [
+          "#1b3229",
+          "#23674e",
+          "#329571",
+          "#44c093",
+          "#72cfae",
+          "#a0dfc8",
+          "#c6ecde",
+          "#eef6f3"
+        ]
+      },
+      "selected-mint": {
+        "role": "secondary",
+        "displayName": "Selected Mint",
+        "canonical": "#bbd4c4",
+        "tonalRamp": [
+          "#212b25",
+          "#355441",
+          "#4d7a5d",
+          "#669e7a",
+          "#8bb69b",
+          "#b1cebb",
+          "#d0e1d6",
+          "#f1f4f2"
+        ]
+      },
+      "street-lamp-mark": {
+        "role": "tertiary",
+        "displayName": "Street-Lamp Amber",
+        "canonical": "#d98e00",
+        "tonalRamp": [
+          "#3d2d0f",
+          "#8a5a00",
+          "#c78200",
+          "#ffa905",
+          "#ffbe42",
+          "#ffd380",
+          "#ffe5b2",
+          "#faf5eb"
+        ]
+      },
+      "brick": {
+        "role": "tertiary",
+        "displayName": "Brick",
+        "canonical": "#a3402a",
+        "tonalRamp": [
+          "#341e19",
+          "#6d2b1c",
+          "#9e3e29",
+          "#cc5338",
+          "#d87d69",
+          "#e5a79a",
+          "#efcac2",
+          "#f7efee"
+        ]
+      },
+      "limestone": {
+        "role": "neutral",
+        "displayName": "Limestone",
+        "canonical": "#ece8df",
+        "tonalRamp": [
+          "#2c2820",
+          "#564c33",
+          "#7d6d4a",
+          "#a28e62",
+          "#b9aa89",
+          "#d0c5af",
+          "#e3dccf",
+          "#f4f3f0"
+        ]
+      },
+      "stone-block": {
+        "role": "neutral",
+        "displayName": "Stone Block",
+        "canonical": "#e0dbcd",
+        "tonalRamp": [
+          "#2c2921",
+          "#554c35",
+          "#7b6e4c",
+          "#9f9065",
+          "#b7ab8b",
+          "#cec6b0",
+          "#e2ddd0",
+          "#f4f3f0"
+        ]
+      },
+      "basalt": {
+        "role": "neutral",
+        "displayName": "Basalt",
+        "canonical": "#0f1411",
+        "tonalRamp": [
+          "#232a26",
+          "#3b4f43",
+          "#557261",
+          "#70947e",
+          "#93ae9e",
+          "#b6c8bd",
+          "#d3ded8",
+          "#f1f3f2"
+        ]
+      },
+      "ink-green": {
+        "role": "neutral",
+        "displayName": "Ink Green",
+        "canonical": "#1d2520",
+        "tonalRamp": [
+          "#232926",
+          "#3d4d43",
+          "#577060",
+          "#73917e",
+          "#95ac9e",
+          "#b8c7bd",
+          "#d4ddd8",
+          "#f1f3f2"
+        ]
+      },
+      "granite-frame": {
+        "role": "neutral",
+        "displayName": "Granite Frame",
+        "canonical": "#4a4c48",
+        "tonalRamp": [
+          "#262726",
+          "#454743",
+          "#636661",
+          "#82857f",
+          "#a1a39e",
+          "#bfc1be",
+          "#d9dad8",
+          "#f2f2f2"
+        ]
+      },
+      "enamel-night": {
+        "role": "primary",
+        "displayName": "Night Enamel",
+        "canonical": "#266a52",
+        "tonalRamp": [
+          "#1b3129",
+          "#24654e",
+          "#349271",
+          "#47bd93",
+          "#74cdae",
+          "#a1ddc8",
+          "#c7ebde",
+          "#eff6f3"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "masthead": {
+        "displayName": "Masthead",
+        "purpose": "Screen titles in the green shell."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "Big diagram number on a plate."
+      },
+      "plate-label": {
+        "displayName": "Plate Label",
+        "purpose": "Capital text on a small plate."
+      },
+      "plate-caption": {
+        "displayName": "Plate Caption",
+        "purpose": "Caption above a plate numeral."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Sentences and hints."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Buttons, chips, segments."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "FEN and PGN only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "none",
+        "value": "none",
+        "purpose": "No shadows anywhere; elevation is 0. Depth is tonal and by 1 dp rules."
+      },
+      {
+        "name": "lamp-halo",
+        "value": "0 0 blur(cell*0.09) amber (#ffb93d)",
+        "purpose": "Night theme only: faint halo of a doubtful square on the board."
+      }
+    ],
+    "motion": [
+      {
+        "name": "fast",
+        "value": "150ms",
+        "purpose": "Leído/Original cross-fade."
+      },
+      {
+        "name": "medium",
+        "value": "200ms",
+        "purpose": "Stone re-lay on the board."
+      },
+      {
+        "name": "slow",
+        "value": "250ms",
+        "purpose": "Longest state change."
+      },
+      {
+        "name": "ease-standard",
+        "value": "Material standard easing",
+        "purpose": "State changes; emphasized-decelerate for entrances."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "medium",
+        "value": "600px"
+      },
+      {
+        "name": "expanded",
+        "value": "840px"
+      },
+      {
+        "name": "wide",
+        "value": "1240px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Numeral Plate",
+      "kind": "custom",
+      "refersTo": "plate-numeral",
+      "description": "Enamel number of a diagram.",
+      "html": "<div class=\"ds-numeral\"><span class=\"ds-cap\">DIAGRAMA</span><span class=\"ds-num\">1</span></div>",
+      "css": ".ds-numeral{position:relative;display:inline-flex;align-items:center;justify-content:center;background:#1f5c46;color:#f7f5ee;border-radius:6px;box-shadow:none;flex-direction:column;min-width:62px;min-height:48px;padding:5px 10px;background-image:linear-gradient(#f7f5ee1a 0,#f7f5ee00 45%)}.ds-numeral::after{content:'';position:absolute;inset:3px;border:1.5px solid #f7f5ee;border-radius:3px;pointer-events:none;}.ds-cap{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:1.3px;line-height:1}.ds-num{font-family:'Barlow Condensed',sans-serif;font-size:30px;font-weight:700;line-height:.95;font-variant-numeric:tabular-nums}"
+    },
+    {
+      "name": "Label Plate",
+      "kind": "custom",
+      "refersTo": "plate",
+      "description": "Capture header.",
+      "html": "<div class=\"ds-plate\">CAPTURA 1</div>",
+      "css": ".ds-plate{position:relative;display:inline-flex;align-items:center;justify-content:center;background:#1f5c46;color:#f7f5ee;border-radius:6px;box-shadow:none;font-family:'Barlow Condensed',sans-serif;min-height:30px;padding:6px 12px;font-size:16px;font-weight:700;letter-spacing:1px}.ds-plate::after{content:'';position:absolute;inset:3px;border:1.5px solid #f7f5ee;border-radius:3px;pointer-events:none;}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action of a screen, a plate.",
+      "html": "<button class=\"ds-btn-primary\">Leer este tablero</button>",
+      "css": ".ds-btn-primary{position:relative;font:600 15px/1.3 Barlow,sans-serif;letter-spacing:.1px;background:#1f5c46;color:#f7f5ee;border:0;border-radius:6px;min-height:48px;min-width:64px;padding:0 24px;cursor:pointer}.ds-btn-primary::after{content:'';position:absolute;inset:3px;border:1.5px solid #f7f5ee;border-radius:3px;pointer-events:none}.ds-btn-primary:hover{background:#2a6a53}.ds-btn-primary:focus-visible{outline:2px solid #1d2520;outline-offset:2px}.ds-btn-primary:active{background:#256350}"
+    },
+    {
+      "name": "Tonal Button",
+      "kind": "button",
+      "refersTo": "button-tonal",
+      "description": "Secondary actions such as Analizar en Lichess.",
+      "html": "<button class=\"ds-btn-tonal\">Analizar en Lichess</button>",
+      "css": ".ds-btn-tonal{font:600 15px/1.3 Barlow,sans-serif;background:#bbd4c4;color:#0e3224;border:0;border-radius:6px;min-height:48px;padding:0 20px;cursor:pointer}.ds-btn-tonal:hover{background:#b0cbba}.ds-btn-tonal:focus-visible{outline:2px solid #1d2520;outline-offset:2px}"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Quiet actions such as Restablecer.",
+      "html": "<button class=\"ds-btn-text\">Restablecer</button>",
+      "css": ".ds-btn-text{font:600 15px/1.3 Barlow,sans-serif;background:transparent;color:#1f5c46;border:0;border-radius:6px;min-height:48px;padding:0 16px;cursor:pointer}.ds-btn-text:hover{background:#1f5c4614}.ds-btn-text:focus-visible{outline:2px solid #1d2520}"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "chip",
+      "refersTo": "segmented-selected",
+      "description": "Leído | Original; selected = mint fill, bold, check.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-on\">&#10003; Leído</button><button>Original</button></div>",
+      "css": ".ds-seg{display:inline-flex;border:1px solid #697768;border-radius:6px;overflow:hidden}.ds-seg button{font:500 15px/1.3 Barlow,sans-serif;color:#1d2520;background:transparent;border:0;min-height:48px;padding:0 24px;cursor:pointer}.ds-seg button+button{border-left:1px solid #697768}.ds-seg .ds-on{background:#bbd4c4;color:#0e3224;font-weight:700}.ds-seg button:hover{background:#1d252014}.ds-seg button:focus-visible{outline:2px solid #1d2520;outline-offset:-2px}"
+    },
+    {
+      "name": "Warning Band",
+      "kind": "custom",
+      "refersTo": "warning-band",
+      "description": "Doubtful-squares status line.",
+      "html": "<div class=\"ds-warn\">2 casillas dudosas</div>",
+      "css": ".ds-warn{font:400 15px/1.4 Barlow,sans-serif;background:#f6e2b8;color:#4a2e00;border-radius:6px;padding:8px 12px;display:inline-block}"
+    },
+    {
+      "name": "Diagram Block",
+      "kind": "card",
+      "refersTo": "diagram-block",
+      "description": "Stone container of one diagram.",
+      "html": "<div class=\"ds-block\"><b>Diagrama 1</b><p class=\"ds-fen\">4N3/3N4/8/k1R4K/7p/6PQ/2N1p3/1n6 b - -</p></div>",
+      "css": ".ds-block{background:#e0dbcd;color:#1d2520;border-radius:10px;padding:16px;font:400 15px/1.4 Barlow,sans-serif}.ds-fen{font:400 13px/1.5 'JetBrains Mono',monospace;color:#47524a;margin:8px 0 0}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Plaza Stone Table",
+    "overview": "**Creative North Star: \"The Plaza Stone Table\"**\n\nEach chess diagram in the session is a stone table in a Spanish or Latin-American plaza: a board of speckled stone set in a polished granite frame, lying on limestone ground under a park-bench green shell. Identification is by enamel street-name plates (the diagram number, the capture header, the one primary action), never by decoration. By night the same plaza goes to basalt and the amber of a street lamp is the only warm light. The app is an Operate tool: the reader compares, fixes one doubtful square and sends the position away; the world supplies materials and a signature, not scenery.\n\nThe board is the constant of the system. It is the same stone in light and dark, the same frame, the same pieces; only the amber of doubt glows in the night theme. Everything around it is standard Material 3 (adaptive; Android first, Windows too) re-dressed in the plate language: 6 dp corners, 1 dp outlines, no capsules, no shadows. Depth is tonal and by rule, never by blur.\n\nThe system refuses the chess-site arrangement of a grey shell around a flat green board, and stock Material shapes (stadium buttons, 20 dp outlines). Spanish UI copy; plates are written in capitals.",
+    "keyCharacteristics": [
+      "Limestone ground, park-bench green shell, basalt at night; stone boards in a granite frame.",
+      "Four things are enamel plates and nothing else: the diagram number, the capture header, the FAB and the one primary button of a screen.",
+      "Amber means \"look again\" (doubtful) and only that; brick means error and only that.",
+      "Flat and tonal: no shadows anywhere; 1 dp rules and tonal containers carry separation.",
+      "Barlow for UI, Barlow Condensed for plates, numerals and the masthead, JetBrains Mono only for FEN and PGN."
+    ],
+    "rules": [
+      {
+        "name": "The Reserved Signal Rule",
+        "body": "Amber is only \"doubtful\"; brick is only \"error\". Neither is ever decoration, a button fill or a brand accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Constant Board Rule",
+        "body": "The board and its pieces do not change with theme brightness. Do not tint, dim or invert them; adjust the shell around them.",
+        "section": "colors"
+      },
+      {
+        "name": "The Stone Speckle Rule",
+        "body": "Texture on stone is 16-34 % chips and is almost invisible on purpose: legible first, texture after.",
+        "section": "colors"
+      },
+      {
+        "name": "The Plate Voice Rule",
+        "body": "Barlow Condensed is for plates, numerals and the masthead only. Running UI text is Barlow.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Is Data Rule",
+        "body": "JetBrains Mono appears only where the text is a position or a game record.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Numerals and counters use tabular figures.",
+        "section": "typography"
+      },
+      {
+        "name": "The No Shadow Rule",
+        "body": "Separation comes from tone and rule, never from a blurred shadow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Lamp Only Rule",
+        "body": "A glow exists solely as the lit lamp of a doubtful square at night.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** let the board stay the same stone in light and dark; change the stone only through \"Piedra\", and re-lay it live in 200 ms.",
+      "**Do** keep enamel to four things: diagram number, capture header, FAB, the one primary button.",
+      "**Do** use 6 dp for controls, 10 dp for containers, 1 dp outlines, 48 dp targets.",
+      "**Do** read all color from the theme (`ColorScheme`, `AppTheme`); the only files with colour literals are tokens and theme.",
+      "**Do** mark doubt with amber ring plus corner triangle plus words (\"dudosa\"), so it never relies on color.",
+      "**Do** keep motion to state changes of 150-250 ms and drop it when the system asks to remove animations."
+    ],
+    "donts": [
+      "**Don't** put a grey shell around a flat green board, or use stadium buttons or 20 dp outlines.",
+      "**Don't** use shadows, blur or glow for elevation.",
+      "**Don't** give a card, row or chip the inner rule of a plate: if everything is a plate, nothing is.",
+      "**Don't** use amber for anything but doubt, or brick for anything but error.",
+      "**Don't** set UI text in Condensed or in JetBrains Mono.",
+      "**Don't** use Material `Icons.*` or glyph icons; use `AppIcon(AppIcons.*)`.",
+      "**Don't** add decorative motion beyond the stone re-lay and the Leído/Original cross-fade."
+    ]
+  }
+}
