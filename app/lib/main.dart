@@ -15,7 +15,7 @@ import 'src/ui/tokens.dart';
 
 /// Version shown in Ajustes. Keep equal to `version:` in pubspec.yaml (without the build number); a test
 /// checks it.
-const String kAppVersion = '0.2.1';
+const String kAppVersion = '0.3.0';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

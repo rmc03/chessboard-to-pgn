@@ -1,7 +1,7 @@
 name: chessboard_pgn
 description: "Chess diagram image to PGN, 100% on-device (simple test app)."
 publish_to: 'none'
-version: 0.2.1+3
+version: 0.3.0+4
 
 environment:
   sdk: ^3.14.0

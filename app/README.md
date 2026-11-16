@@ -1,20 +1,23 @@
 # App Flutter de prueba (Android + Windows)
 
-Pantalla única y deliberadamente simple para probar el reconocimiento **100 % en el dispositivo**:
+App para probar el reconocimiento **100 % en el dispositivo**, con el estilo «Plaza» (tablero de piedra, tema claro y oscuro;
+ver [`DESIGN.md`](../DESIGN.md) y [`PRODUCT.md`](../PRODUCT.md) en la raíz):
 
-1. **Elegir imagen** (galería en Android, selector de archivos en Windows): una captura con varios diagramas,
-   una foto de página o un diagrama suelto.
-2. Cada diagrama completo se lee y se muestra como un tablero. Las casillas **poco seguras salen con borde ámbar**.
-3. **Toca una casilla** para corregirla. Elige quién mueve y si se proponen enroques; verás avisos si la posición
-   es ilegal (falta un rey, peón en la 1ª/8ª fila, el bando que no mueve está en jaque…).
-4. **Copiar PGN**: un PGN con una partida por diagrama (`[SetUp "1"] [FEN "…"]` y resultado `*`).
-5. **Compartir** (solo Android): hoja de compartir del sistema, como texto (chats) o como archivo `.pgn`
-   (tipo `application/x-chess-pgn`, para abrirlo en una app de ajedrez). En Windows el botón se oculta.
-6. **Guardar .pgn**: diálogo de guardado (Android: selector de documentos del sistema, p. ej. *Descargas*; Windows: diálogo
-   nativo) con el nombre `diagramas-AAAAMMDD-HHMM.pgn` y el mismo texto que «Copiar».
-7. El menú ⋮ de cada tarjeta ofrece Copiar FEN, Copiar PGN, Compartir PGN y Ajustar recorte.
+1. **Elegir captura** (galería en Android, selector de archivos en Windows; Ctrl+O): una captura con varios diagramas,
+   una foto de página o un diagrama suelto. Se pueden añadir varias capturas a la misma sesión.
+2. Cada diagrama completo se lee y se muestra como un tablero. Las casillas **poco seguras salen con borde ámbar** y se
+   revisan una a una. **Leído / Original** compara con el recorte (mantén pulsado el tablero para verlo).
+3. **Toca una casilla** para corregirla. Elige quién mueve y los enroques; verás explicadas las posiciones imposibles.
+   Las acciones se deshacen en lugar de pedir confirmación.
+4. **Guardar .pgn** (Ctrl+S en Windows): diálogo de guardado (Android: selector de documentos del sistema; Windows: diálogo
+   nativo) con el nombre `diagramas-AAAAMMDD-HHMM.pgn`; un PGN con una partida por diagrama (`[SetUp "1"] [FEN "…"]`,
+   resultado `*`). Antes de exportar se avisa de los diagramas con dudas o problemas.
+5. **Compartir** (solo Android): hoja de compartir del sistema, como texto, como archivo `.pgn` o **Copiar PGN**. En Windows
+   no hay compartir y la barra tiene **Copiar PGN** como botón.
+6. Cada diagrama tiene sus acciones a la vista: Analizar en Lichess, compartir o copiar PGN, copiar FEN, ajustar recorte,
+   ver desde las negras y quitar. **Ajustes**: tema, piedra, estilo, coordenadas y juego de piezas.
 
-**Recorte a mano.** Si un diagrama no se detecta o se lee mal: **Recortar a mano** (debajo de «Elegir imagen») abre la imagen a
+**Recorte a mano.** Si un diagrama no se detecta o se lee mal: **Recortar a mano** (botón de recorte de la captura) abre la imagen a
 pantalla completa con un rectángulo ajustable (arrastra las esquinas o el interior; mejor con un poco de margen: el programa
 se ajusta solo a la cuadrícula dentro del recorte) y añade el tablero leído como un diagrama nuevo. **Ajustar recorte** en una
 tarjeta repite la lectura con otro recorte (parte del rectángulo actual) y sustituye ese diagrama. Si no hay ningún marco, se usa la
@@ -116,8 +119,8 @@ se instalen sobre las anteriores.** El flujo los usa solo si existen; `android/k
 ## Nombre, icono y versión
 
 Nombre visible «Chess to PGN». Los iconos (Android adaptativo y clásico, Windows `.ico`) salen de `python3 tool/make_icons.py`.
-La versión es la de `pubspec.yaml` (`0.2.1+3` → etiqueta `v0.2.1`); las novedades de cada versión van en `CHANGELOG.md`.
+La versión es la de `pubspec.yaml` (`0.3.0+4` → etiqueta `v0.3.0`); las novedades de cada versión van en `CHANGELOG.md`.
 
-Las piezas del tablero se dibujan con `assets/fonts/ChessFigures.ttf` (solo los 12 trebejos de DejaVu Sans, 5 kB; licencia en
+Las piezas son SVG de cinco juegos incluidos (`assets/pieces/`); el juego tipográfico usa `assets/fonts/ChessFigures.ttf` (solo los 12 trebejos de DejaVu Sans, 5 kB; licencia en
 `assets/fonts/LICENSE-DejaVu.txt`, se regenera con `python3 tool/make_figures_font.py`), no con la fuente del sistema: Android
 dibuja el peón ♟ como emoji de color fijo y los peones blancos y negros se veían iguales.

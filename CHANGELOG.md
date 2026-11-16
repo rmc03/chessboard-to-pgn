@@ -2,13 +2,27 @@
 
 El flujo de release copia en las notas de cada versión la sección `## <versión>` de este archivo.
 
-## 0.2.1
+## 0.3.0
 
-- **Peones blancos y negros se veían iguales en Android.** El tablero del resultado se dibujaba con la fuente del
-  sistema, y Android sustituye el peón (el único trebejo que también es un emoji) por un emoji de color fijo, así que
-  todos los peones salían oscuros aunque el FEN y el PGN fueran correctos. Ahora las piezas se dibujan con una fuente
-  incluida en la app: blancas con cuerpo blanco y contorno negro, negras macizas, igual en Android y en Windows.
-- El selector para corregir una casilla distingue ahora las piezas blancas de las negras (antes las mostraba iguales).
+Todo está comprobado con pruebas automáticas y capturas de pantalla generadas; no se ha probado en un dispositivo físico.
+
+- **Estilo nuevo, «Plaza»**: tableros de piedra con marco de granito, cinco piedras a elegir, cabecera y botones en verde de banco
+  de parque, placas esmaltadas para los números de diagrama, tipografía Barlow, tema claro y oscuro e iconos nuevos.
+- **Cinco juegos de piezas** a elegir.
+- **Varias capturas en una sesión**, con el avance de cada tablero mientras se lee.
+- **Compara cada diagrama con el recorte original**: Leído / Original, mantén pulsado el tablero para ver el original, y
+  también dentro del editor de casilla.
+- **Revisa las casillas dudosas una a una**.
+- **Posiciones imposibles explicadas**, con el motivo.
+- **Turno y enroques** por separado para cada diagrama.
+- **Analizar en Lichess** desde cada diagrama.
+- **Guardar .pgn, compartir y copiar**, con avisos antes de exportar si hay dudas o problemas.
+- **Deshacer en lugar de confirmaciones**, y sin menús ocultos: las acciones están a la vista.
+- **Recorte a mano** con zoom, lupa y cuadrícula; los botones de zoom se ven también cuando no se pueden usar.
+- **Pantalla de Ajustes**: tema, piedra, estilo, coordenadas y piezas.
+- **Windows**: atajos de teclado Ctrl+O (elegir captura) y Ctrl+S (guardar .pgn).
+- **Peones blancos y negros distintos en Android** (de la 0.2.1): las piezas se dibujan con imágenes incluidas en la app, no
+  con la fuente del sistema, que mostraba todos los peones como el mismo emoji oscuro.
 
 ## 0.2.0
 
