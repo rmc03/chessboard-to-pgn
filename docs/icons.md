@@ -28,6 +28,7 @@ los botones usan siempre `AppIcon`, nunca `HugeIcon` directo). Diccionario (una 
 | Turno forzado (candado) | `strokeRoundedSquareLock02` |
 | Ir / revisar (chevron) | `strokeRoundedArrowRight01` |
 | Cerrar | `strokeRoundedCancel01` |
+| Atrás (barra superior de una pantalla; la dibuja el tema) | `strokeRoundedArrowLeft01` |
 | Reintentar | `strokeRoundedRefresh` |
 | Deshacer | `strokeRoundedUndo02` |
 | Acercar / alejar / ver toda la imagen | `strokeRoundedZoomInArea` / `strokeRoundedZoomOutArea` / `strokeRoundedFullScreen` |
@@ -35,5 +36,7 @@ los botones usan siempre `AppIcon`, nunca `HugeIcon` directo). Diccionario (una 
 | Información / privacidad | `strokeRoundedInformationCircle` / `strokeRoundedSquareLock02` |
 | Licencias | `strokeRoundedLicense` |
 | Sin tablero encontrado | `strokeRoundedSearch01` |
+
+Ningún menú de tres puntos: todas las acciones son botones visibles (no hay icono de «Más»).
 
 Si una acción nueva necesita icono, se añade aquí primero.

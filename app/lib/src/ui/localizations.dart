@@ -33,7 +33,7 @@ class SpanishMaterialLocalizations extends DefaultMaterialLocalizations {
   @override
   String get closeButtonTooltip => 'Cerrar';
   @override
-  String get deleteButtonTooltip => 'Eliminar';
+  String get deleteButtonTooltip => 'Quitar';
   @override
   String get moreButtonTooltip => 'Más acciones';
   @override

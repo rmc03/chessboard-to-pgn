@@ -1,8 +1,12 @@
 // The UX fix round on the home screen: triage between diagrams, readable disabled turn, castling caption, capture
 // thumbnail and viewer, rebuild isolation, phone chrome (FAB, one-row export bar, scroll padding) and desktop strips.
+import 'dart:typed_data';
+
 import 'package:chessboard_pgn/src/ui/capture_thumb.dart';
 import 'package:chessboard_pgn/src/ui/color_math.dart';
 import 'package:chessboard_pgn/src/ui/diagram_block.dart';
+import 'package:chessboard_pgn/src/ui/export_bar.dart';
+import 'package:chessboard_pgn/src/ui/plate.dart';
 import 'package:chessboard_pgn/src/pipeline.dart';
 import 'package:chessboard_pgn/src/session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -249,48 +253,93 @@ void main() {
     }
 
     testWidgets(
-      'the extended FAB shrinks to the 56 dp icon FAB once scrolled, and comes back at the top',
+      'on a phone with the export bar nothing floats: "Añadir captura" is a 48 dp plate button at the end of the bar',
       (tester) async {
         await long(tester, size: const Size(412, 700));
-        expect(find.text('Añadir captura'), findsOneWidget);
+        expect(find.byType(FloatingActionButton), findsNothing);
+        expect(find.text('Añadir captura'), findsNothing);
+        final add = find.byKey(const ValueKey('add-capture'));
+        expect(tester.getSize(add), const Size(48, 48));
+        expect(find.byTooltip('Añadir captura'), findsOneWidget);
+        final style = tester.widget<IconButton>(add).style!;
+        expect(
+          style.shape!.resolve(const {}),
+          isA<PlateBorder>(),
+          reason: 'the shape of the FAB, so it reads as one family',
+        );
+        // at the end of the bar, on the row of the exports
+        final copy = tester.getRect(find.byKey(const ValueKey('copy-all')));
+        final rect = tester.getRect(add);
+        expect(rect.left, greaterThanOrEqualTo(copy.right));
+        expect(rect.center.dy, closeTo(copy.center.dy, 1));
+        // the bar is the bottom of the screen: scrolling does not change a thing
         await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
         await tester.pumpAndSettle();
-        expect(find.text('Añadir captura'), findsNothing);
-        final fab = find.byType(FloatingActionButton);
-        expect(fab, findsOneWidget);
-        expect(tester.getSize(fab), const Size(56, 56));
-        expect(find.byTooltip('Añadir captura'), findsOneWidget);
-
-        await tester.drag(find.byType(CustomScrollView), const Offset(0, 3000));
-        await tester.pumpAndSettle();
-        expect(find.text('Añadir captura'), findsOneWidget);
+        expect(tester.getRect(add), rect);
+        expect(find.byType(FloatingActionButton), findsNothing);
       },
     );
 
-    testWidgets('large text turns it into the icon FAB at once (1.15 and up)', (
+    testWidgets('at the top of the list no button covers block 1', (
       tester,
     ) async {
-      await long(tester, size: const Size(412, 900), textScale: 1.15);
-      expect(find.text('Añadir captura'), findsNothing);
-      expect(
-        tester.getSize(find.byType(FloatingActionButton)),
-        const Size(56, 56),
-      );
-      expect(find.byTooltip('Añadir captura'), findsOneWidget);
+      await long(tester, size: const Size(360, 780), textScale: 1.3);
+      expect(find.byType(FloatingActionButton), findsNothing);
+      // the list ends where the bar starts, and the button is in the bar
+      final list = tester.getRect(find.byType(CustomScrollView));
+      final add = tester.getRect(find.byKey(const ValueKey('add-capture')));
+      expect(list.overlaps(add), isFalse);
+      expect(list.bottom, lessThanOrEqualTo(add.top));
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('at 1.1x text it stays extended', (tester) async {
-      await long(tester, size: const Size(412, 900), textScale: 1.1);
-      expect(find.text('Añadir captura'), findsOneWidget);
-    });
+    testWidgets(
+      'without a bar (the first capture is still being read) the extended FAB floats',
+      (tester) async {
+        final gate = Gate();
+        final home = Home(
+          Session(readImage: gate.reader([board(middlegame), board(endgame)])),
+        );
+        await home.pump(tester, size: const Size(412, 800));
+        home.picks.add(Uint8List.fromList([1]));
+        await tester.tap(find.text('Elegir captura'));
+        await tester.pump(const Duration(milliseconds: 100));
+        gate.found.complete();
+        await tester.pump();
+        expect(find.byType(FloatingActionButton), findsOneWidget);
+        expect(find.text('Añadir captura'), findsOneWidget);
+        expect(find.byType(DiagramSkeleton), findsWidgets);
+        // finish: the bar arrives and the FAB moves into it as the plate button
+        for (final c in gate.boards) {
+          c.complete();
+        }
+        gate.finish.complete();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.byType(FloatingActionButton), findsNothing);
+        expect(find.byKey(const ValueKey('add-capture')), findsOneWidget);
+      },
+    );
 
-    testWidgets('from 600 dp it is never an icon, scrolled or not', (
+    testWidgets('from 600 dp the extended FAB is docked in the export bar', (
       tester,
     ) async {
       await long(tester, size: const Size(700, 700));
+      final fab = find.byType(FloatingActionButton);
+      expect(find.text('Añadir captura'), findsOneWidget);
+      final bar = tester.getRect(
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('copy-all')),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      expect(bar.contains(tester.getCenter(fab)), isTrue);
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
       await tester.pumpAndSettle();
       expect(find.text('Añadir captura'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     for (final (warnings, scale) in [(false, 1.3), (true, 1.3), (true, 1.0)]) {
@@ -308,6 +357,7 @@ void main() {
             tester.getCenter(bar).dy,
             tester.getCenter(find.byKey(const ValueKey('share-all'))).dy,
             tester.getCenter(find.byKey(const ValueKey('copy-all'))).dy,
+            tester.getCenter(find.byKey(const ValueKey('add-capture'))).dy,
           ];
           for (final c in buttons) {
             expect(c, closeTo(buttons.first, 2));
@@ -316,12 +366,21 @@ void main() {
           final summary = tester.getRect(
             warnings
                 ? find.byKey(const ValueKey('export-warnings'))
-                : find.text('3 diagramas'),
+                : find.descendant(
+                    of: find.byType(ExportBar),
+                    matching: find.text('3 diagramas'),
+                  ),
           );
           expect(summary.center.dy, closeTo(buttons.first, 6));
           expect(summary.right, lessThanOrEqualTo(tester.getRect(bar).left));
           expect(
             tester.getRect(find.byKey(const ValueKey('copy-all'))).right,
+            lessThanOrEqualTo(
+              tester.getRect(find.byKey(const ValueKey('add-capture'))).left,
+            ),
+          );
+          expect(
+            tester.getRect(find.byKey(const ValueKey('add-capture'))).right,
             lessThanOrEqualTo(360),
           );
           final barBox = tester.getRect(
@@ -350,9 +409,7 @@ void main() {
         await tester.pumpAndSettle();
         final last = find.byTooltip('Copiar FEN').last;
         expect(last.hitTestable(), findsOneWidget);
-        final rect = tester.getRect(last);
-        final fab = tester.getRect(find.byType(FloatingActionButton));
-        expect(rect.overlaps(fab), isFalse);
+        expect(find.byType(FloatingActionButton), findsNothing);
         // the clear-all button is reachable below it
         expect(find.byKey(const ValueKey('clear-all')), findsOneWidget);
         expect(
@@ -401,7 +458,7 @@ void main() {
           greaterThan(900),
           reason: 'content column, not one block',
         );
-        final remove = tester.getRect(find.text('Quitar'));
+        final remove = tester.getRect(find.text('Quitar captura'));
         expect(
           remove.right,
           closeTo(strip.right - 16, 12),
@@ -421,7 +478,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Recortar a mano'), findsOneWidget);
-      expect(find.text('Quitar'), findsOneWidget);
+      expect(find.text('Quitar captura'), findsOneWidget);
     });
 
     testWidgets('on a phone the strip stacks its parts', (tester) async {

@@ -7,6 +7,7 @@ import 'package:chessboard_pgn/src/session.dart';
 import 'package:chessboard_pgn/src/ui/board.dart';
 import 'package:chessboard_pgn/src/ui/diagram_block.dart';
 import 'package:chessboard_pgn/src/ui/icons.dart';
+import 'package:chessboard_pgn/src/ui/plate.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -348,14 +349,21 @@ void main() {
     );
 
     testWidgets(
-      'the hint "Mantén pulsado…" shows once per session, until Original is used',
+      'the hint "Mantén pulsado…" shows in the first block only, until Original is used',
       (tester) async {
         final home = await _home(tester, [
           board(middlegame, crop: true),
           board(endgame, crop: true),
         ]);
         const hint = 'Mantén pulsado el tablero para ver el original.';
-        expect(find.text(hint), findsNWidgets(2));
+        expect(find.text(hint), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(DiagramBlock).first,
+            matching: find.text(hint),
+          ),
+          findsOneWidget,
+        );
         await tester.tap(find.text('Original').first);
         await tester.pumpAndSettle();
         expect(
@@ -366,6 +374,32 @@ void main() {
         expect(home.session.diagrams, hasLength(2));
       },
     );
+
+    testWidgets('the number is an enamel plate, with the status beside it', (
+      tester,
+    ) async {
+      await _home(tester, [
+        board(middlegame, confidence: {18: 0.5}),
+        board(endgame),
+      ]);
+      final first = find.byType(DiagramBlock).first;
+      final plate = find.descendant(
+        of: first,
+        matching: find.byType(EnamelPlate),
+      );
+      expect(plate, findsOneWidget);
+      expect(find.text('DIAGRAMA'), findsNWidgets(2));
+      expect(tester.widget<EnamelPlate>(plate).number, 1);
+      // the status line sits to the right of the plate, centred on it
+      final review = tester.getRect(
+        find.descendant(
+          of: first,
+          matching: find.byKey(const ValueKey('review-doubtful')),
+        ),
+      );
+      expect(review.left, greaterThan(tester.getRect(plate).right));
+      expect(review.center.dy, closeTo(tester.getRect(plate).center.dy, 3));
+    });
 
     testWidgets('a long press dismisses the hint too', (tester) async {
       await _home(tester, [board(middlegame, crop: true)]);
@@ -499,6 +533,42 @@ void main() {
       },
     );
 
+    testWidgets(
+      '"Ver desde las negras" looks unselected when off (no fill) and filled with the secondary container when on',
+      (tester) async {
+        await _home(tester, [board(middlegame)]);
+        final flip = find.byKey(const ValueKey('flip'));
+        final scheme = Theme.of(tester.element(flip)).colorScheme;
+        Color? fill() => tester
+            .widget<Material>(
+              find.descendant(of: flip, matching: find.byType(Material)).first,
+            )
+            .color;
+        // a standard IconButton: the toggle state is its isSelected
+        expect(tester.widget<IconButton>(flip).isSelected, isFalse);
+        expect(fill(), isNot(scheme.secondaryContainer));
+        expect(fill()?.a ?? 0, 0, reason: 'transparent while off');
+        // "Ajustar recorte" beside it has the same bare look
+        final crop = find.byKey(const ValueKey('adjust-crop'));
+        expect(
+          tester
+              .widget<Material>(
+                find
+                    .descendant(of: crop, matching: find.byType(Material))
+                    .first,
+              )
+              .color
+              ?.a,
+          fill()?.a,
+        );
+
+        await tester.tap(flip);
+        await tester.pumpAndSettle();
+        expect(tester.widget<IconButton>(flip).isSelected, isTrue);
+        expect(fill(), scheme.secondaryContainer);
+      },
+    );
+
     testWidgets('the toggle works from the keyboard', (tester) async {
       final home = await _home(tester, [board(middlegame)]);
       await pressByKeyboard(tester, 'Ver desde las negras');
@@ -569,7 +639,7 @@ void main() {
         expect(find.byType(DiagramBlock), findsOneWidget);
         expect(find.text('Diagrama 1 quitado'), findsOneWidget);
         expect(find.text('Deshacer'), findsOneWidget);
-        expect(find.text('Captura 1 · 1 diagrama'), findsOneWidget);
+        expectCaptureHeader(tester, 1, '1 diagrama');
 
         await tester.tap(find.text('Deshacer'));
         await tester.pumpAndSettle();
@@ -667,7 +737,9 @@ void main() {
         await tester.pumpAndSettle();
         expect(home.clipboard, lichessAnalysisUri(d.fen).toString());
         expect(
-          find.text('No se pudo abrir Lichess. Enlace copiado.'),
+          find.text(
+            'No se pudo abrir Lichess. Enlace copiado: pégalo en el navegador.',
+          ),
           findsOneWidget,
         );
       },

@@ -142,16 +142,46 @@ class Home {
     await tester.pump();
   }
 
-  /// Taps "Elegir captura" / the "Añadir captura" FAB (extended or icon only) with [bytes] in the picker and lets the read finish.
+  /// Taps "Elegir captura" / "Añadir captura" (the FAB, or the plate icon button of the export bar on a phone)
+  /// with [bytes] in the picker and lets the read finish.
   Future<void> addCapture(WidgetTester tester, [int code = 1]) async {
     picks.add(Uint8List.fromList([code]));
-    await tester.tap(
-      session.isEmpty
-          ? find.text('Elegir captura')
-          : find.byType(FloatingActionButton),
-    );
+    final target = session.isEmpty
+        ? find.text('Elegir captura')
+        : find.byKey(const ValueKey('add-capture'));
+    // the empty screen scrolls at large text sizes
+    await tester.ensureVisible(target);
+    await tester.tap(target);
     await tester.pumpAndSettle();
   }
+}
+
+/// The header of capture [n]: its plate "CAPTURA n" and, once it is read, "K diagramas" beside it (the count is
+/// looked for inside the header, because the export bar says it too). [offstage]: the header may be scrolled out.
+void expectCaptureHeader(
+  WidgetTester tester,
+  int n, [
+  String? count,
+  bool offstage = false,
+]) {
+  expect(
+    find.text('CAPTURA $n', skipOffstage: !offstage),
+    findsOneWidget,
+    reason: 'the plate',
+  );
+  final headers = tester
+      .widgetList<Wrap>(find.byType(Wrap, skipOffstage: false))
+      .where(
+        (w) => w.children.any(
+          (c) => c is Semantics && c.properties.label == 'Captura $n',
+        ),
+      );
+  expect(headers, hasLength(1));
+  final texts = [
+    for (final w in headers.single.children)
+      if (w is Text) w.data,
+  ];
+  expect(texts, count == null ? isEmpty : [count]);
 }
 
 /// Session whose reader returns the boards of [byCode] for the first byte of the image.

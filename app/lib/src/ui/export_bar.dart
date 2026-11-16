@@ -1,7 +1,8 @@
 // The export bar pinned at the bottom of the session, ONE row: how many diagrams (and how many of them have
-// warnings), "Guardar .pgn", "Compartir" (Android only) and "Copiar PGN". Where the labels do not fit (a phone at
-// large text) the buttons turn into icon buttons with tooltips instead of wrapping. On wide windows the extended
-// FAB lives inside it, docked at the end ([trailing]), so the one primary action and the exports read as one bar.
+// warnings), "Guardar .pgn", "Compartir" (Android only), "Copiar PGN" and, at the end, "Añadir captura"
+// ([trailing]: the extended plate FAB from 600 dp, a 48 dp plate icon button on a phone), so the one primary
+// action and the exports read as one bar and nothing floats over the blocks. Where the labels do not fit they
+// turn into icon buttons with tooltips (the share label first, then the save label) instead of wrapping.
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -19,20 +20,45 @@ class ExportBar extends StatelessWidget {
     super.key,
     required this.actions,
     this.trailing,
+    this.trailingWidth = minTarget,
     this.horizontalPadding,
     this.onWarnings,
   });
 
   final HomeActions actions;
 
-  /// The docked FAB on wide windows.
+  /// "Añadir captura" at the end of the bar.
   final Widget? trailing;
+
+  /// Width of [trailing], so the labels can be measured against what is left.
+  final double trailingWidth;
+
+  /// Width of the extended FAB "Añadir captura" at the current text size.
+  static double extendedFabWidth(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.floatingActionButtonTheme.extendedTextStyle;
+    return 2 * Space.lg +
+        24 +
+        (theme.floatingActionButtonTheme.extendedIconLabelSpacing ?? 12) +
+        _width('Añadir captura', style, MediaQuery.textScalerOf(context));
+  }
 
   /// Side padding; the screen's gutter by default (wide windows align it with the content column).
   final double? horizontalPadding;
 
   /// The user tapped the count of diagrams with warnings: the screen goes to the first one.
   final void Function(Diagram firstFlagged)? onWarnings;
+
+  /// Horizontal padding of the labelled buttons: 12 dp each side, so the label has room on a phone.
+  static final ButtonStyle _compact = ButtonStyle(
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: Space.md),
+    ),
+  );
+
+  /// What a labelled button adds to its label: the icon (20), its gap (8) and the padding (2 x 12).
+  static const double _saveExtra = 20 + 8 + 2 * Space.md;
+  static const double _shareExtra = _saveExtra;
 
   static String countText(int n) => exporter.diagramsText(n);
 
@@ -78,9 +104,14 @@ class ExportBar extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(gutter, Space.sm, gutter, Space.sm),
           child: LayoutBuilder(
             builder: (context, c) {
-              // Do the labels fit? Measured with the real text scale, so the answer is right at any font size.
+              // Which labels fit? Measured with the real text scale, so the answer is right at any font size.
               final saveLabel = _width(
                 'Guardar .pgn',
+                theme.textTheme.labelLarge,
+                scaler,
+              );
+              final shareLabel = _width(
+                'Compartir',
                 theme.textTheme.labelLarge,
                 scaler,
               );
@@ -95,15 +126,19 @@ class ExportBar extends StatelessWidget {
               final left = inline
                   ? countW + warnW + Space.lg
                   : math.max(countW, warnW);
-              final saveFull = saveLabel + 72;
-              final need =
+              final fixed =
                   left +
                   Space.md +
-                  saveFull +
-                  (canShare ? minTarget : 0) +
-                  minTarget;
-              final labelled = trailing != null || c.maxWidth >= need;
-              final shareLabelled = labelled && width >= 560;
+                  minTarget + // copy
+                  (trailing == null ? 0 : trailingWidth + Space.sm);
+              final saveFull = saveLabel + _saveExtra;
+              final shareFull = shareLabel + _shareExtra;
+              final shareIcon = canShare ? minTarget : 0.0;
+              final room = c.maxWidth - fixed;
+              final shareLabelled =
+                  canShare && width >= 560 && room >= saveFull + shareFull;
+              final labelled =
+                  room >= saveFull + (shareLabelled ? shareFull : shareIcon);
 
               final summary = _summary(
                 context,
@@ -119,6 +154,7 @@ class ExportBar extends StatelessWidget {
                   if (labelled)
                     FilledButton.tonalIcon(
                       key: const ValueKey('save-pgn'),
+                      style: _compact,
                       onPressed: () => unawaited(actions.saveAll(context)),
                       icon: const AppIcon(AppIcons.save),
                       label: const Text('Guardar .pgn'),
@@ -135,6 +171,7 @@ class ExportBar extends StatelessWidget {
                     if (shareLabelled)
                       TextButton.icon(
                         key: const ValueKey('share-all'),
+                        style: _compact,
                         onPressed: _share(context, count),
                         icon: const AppIcon(AppIcons.share),
                         label: const Text('Compartir'),
@@ -160,7 +197,7 @@ class ExportBar extends StatelessWidget {
                     icon: const AppIcon(AppIcons.copy),
                   ),
                   if (trailing != null) ...[
-                    const SizedBox(width: Space.lg),
+                    const SizedBox(width: Space.sm),
                     trailing!,
                   ],
                 ],

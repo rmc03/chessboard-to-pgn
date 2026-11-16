@@ -5,6 +5,8 @@
 //
 //   EnamelPlate.numeral(2)                    "DIAGRAMA" over a big 2 (reads "Diagrama 2")
 //   EnamelPlate.label('CAPTURA 1')            small plate with a line of text
+//   EnamelPlate.numeral(1, muted: true)       the plate of something that is not yours (the example of the empty
+//                                             screen): stone fill and an outline rule, no enamel, no inner rule
 //   FloatingActionButton.extended(...)        gets [PlateBorder] from the theme: nothing to do
 //   FilledButton(style: plateButtonStyle(context), ...)   the primary button of a screen
 //   PlateBorder(ruleColor: ...)               the shape itself, for anything else that must be a plate
@@ -173,19 +175,28 @@ class EnamelPlate extends StatelessWidget {
     super.key,
     this.caption = 'DIAGRAMA',
     this.semanticLabel,
+    this.muted = false,
   }) : text = null,
        _kind = _PlateKind.numeral;
 
   /// A small plate with one line of text, written in capitals: the header of a capture ("CAPTURA 1").
-  const EnamelPlate.label(String this.text, {super.key, this.semanticLabel})
-    : number = null,
-      caption = null,
-      _kind = _PlateKind.label;
+  const EnamelPlate.label(
+    String this.text, {
+    super.key,
+    this.semanticLabel,
+    this.muted = false,
+  }) : number = null,
+       caption = null,
+       _kind = _PlateKind.label;
 
   final int? number;
   final String? caption;
   final String? text;
   final _PlateKind _kind;
+
+  /// A quiet plate: stone fill with a 1 dp outline instead of enamel and the inner rule. For the example of the
+  /// empty screen, which is not the user's diagram.
+  final bool muted;
 
   /// Overrides the spoken text (default: the caption and number, or the text, in sentence case).
   final String? semanticLabel;
@@ -204,7 +215,9 @@ class EnamelPlate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppTheme.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final numeral = _kind == _PlateKind.numeral;
+    final ink = muted ? scheme.onSurfaceVariant : app.onPlate;
     final content = numeral
         ? Column(
             mainAxisSize: MainAxisSize.min,
@@ -214,13 +227,13 @@ class EnamelPlate extends StatelessWidget {
                 Text(
                   caption!,
                   maxLines: 1,
-                  style: app.plateCaption.copyWith(color: app.onPlate),
+                  style: app.plateCaption.copyWith(color: ink),
                 ),
               const SizedBox(height: 1),
               Text(
                 '$number',
                 maxLines: 1,
-                style: app.numeral.copyWith(color: app.onPlate),
+                style: app.numeral.copyWith(color: ink),
               ),
             ],
           )
@@ -228,27 +241,34 @@ class EnamelPlate extends StatelessWidget {
             text!,
             maxLines: 1,
             softWrap: false,
-            style: app.plateLabel.copyWith(color: app.onPlate),
+            style: app.plateLabel.copyWith(color: ink),
           );
     final plate = DecoratedBox(
       decoration: ShapeDecoration(
-        color: app.plate,
-        shape: PlateBorder(ruleColor: app.onPlate),
+        color: muted ? scheme.surfaceContainerHighest : app.plate,
+        shape: muted
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(Corner.control),
+                side: BorderSide(color: scheme.outline),
+              )
+            : PlateBorder(ruleColor: app.onPlate),
       ),
       child: DecoratedBox(
-        // the gloss of enamel: a little light on the upper half
+        // the gloss of enamel: a little light on the upper half (none on a muted plate)
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(Corner.control),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: const [0, 0.45, 0.451],
-            colors: [
-              app.onPlate.withValues(alpha: 0.10),
-              app.onPlate.withValues(alpha: 0),
-              app.onPlate.withValues(alpha: 0),
-            ],
-          ),
+          gradient: muted
+              ? null
+              : LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: const [0, 0.45, 0.451],
+                  colors: [
+                    app.onPlate.withValues(alpha: 0.10),
+                    app.onPlate.withValues(alpha: 0),
+                    app.onPlate.withValues(alpha: 0),
+                  ],
+                ),
         ),
         child: ConstrainedBox(
           constraints: numeral

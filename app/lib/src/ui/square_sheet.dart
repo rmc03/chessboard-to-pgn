@@ -26,13 +26,15 @@ enum SquareSheetResult {
 ///
 /// With [review] the sheet walks through the doubtful squares, calling [onSquare] each time the square it is
 /// about (the one to mark as selected on the board) changes, and returns [SquareSheetResult.reviewed] when it
-/// ran out of doubtful squares.
+/// ran out of doubtful squares. [onHeight] hears the height of the sheet once it is laid out (and again when it
+/// changes), so the screen behind can leave room for it.
 Future<SquareSheetResult?> showSquareSheet(
   BuildContext context, {
   required Diagram diagram,
   required int square,
   bool review = false,
   ValueChanged<int>? onSquare,
+  ValueChanged<double>? onHeight,
 }) {
   final scheme = Theme.of(context).colorScheme;
   return showModalBottomSheet<SquareSheetResult>(
@@ -46,6 +48,7 @@ Future<SquareSheetResult?> showSquareSheet(
       square: square,
       review: review,
       onSquare: onSquare,
+      onHeight: onHeight,
     ),
   );
 }
@@ -57,12 +60,14 @@ class SquareSheet extends StatefulWidget {
     required this.square,
     this.review = false,
     this.onSquare,
+    this.onHeight,
   });
 
   final Diagram diagram;
   final int square;
   final bool review;
   final ValueChanged<int>? onSquare;
+  final ValueChanged<double>? onHeight;
 
   @override
   State<SquareSheet> createState() => _SquareSheetState();
@@ -112,6 +117,12 @@ class _SquareSheetState extends State<SquareSheet> {
     final changed = _d.changedFromRead(_square);
     final doubtful = _d.isDoubtful(_square);
     final gutter = Space.gutter(MediaQuery.sizeOf(context).width);
+    if (widget.onHeight != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final box = mounted ? context.findRenderObject() : null;
+        if (box is RenderBox && box.hasSize) widget.onHeight!(box.size.height);
+      });
+    }
 
     return SingleChildScrollView(
       child: Padding(

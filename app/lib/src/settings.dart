@@ -40,9 +40,6 @@ class AppSettings extends ChangeNotifier {
     this._boardStyle = BoardStyle.stone,
     this._showCoordinates = true,
     String pieceSetId = defaultPieceSetId,
-    // Legacy: the ink of the previous design. There are no inks any more, so it is ignored (the default stone
-    // is used); it only keeps old call sites compiling.
-    String? inkId,
   }) : _stoneId = stoneIds.contains(stoneId) ? stoneId : defaultStoneId,
        _pieceSetId = pieceSetId.isEmpty ? defaultPieceSetId : pieceSetId,
        _prefs = null;

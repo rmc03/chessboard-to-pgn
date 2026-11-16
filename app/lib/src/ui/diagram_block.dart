@@ -1,5 +1,6 @@
-// The diagram block (docs/ux-spec.md, 4.2): ONE tonal surface per diagram, top to bottom: numeral and status
-// (the error lines and, when there are doubtful squares, the "Revisar dudosas" row), the Leído | Original
+// The diagram block (docs/ux-spec.md, 4.2): ONE tonal surface per diagram, top to bottom: the enamel plate with
+// the number and the status beside it (the error lines and, when there are doubtful squares, the "Revisar
+// dudosas" row), the Leído | Original
 // comparator with "Ajustar recorte" and "Ver desde las negras" on the same row, the board, the turn caption, the
 // castling chips, the actions (Lichess, share or copy, remove) and the FEN with its copy button. No overflow menu.
 //
@@ -15,8 +16,10 @@ import 'package:material_ui/material_ui.dart';
 import '../diagram.dart';
 import '../session.dart';
 import 'board.dart';
+import 'equal_row.dart';
 import 'home_actions.dart';
 import 'icons.dart';
+import 'plate.dart';
 import 'scope.dart';
 import 'square_sheet.dart';
 import 'theme.dart';
@@ -26,7 +29,9 @@ import 'tokens.dart';
 const double blockMaxWidth = 440;
 
 const double _pad = Space.lg;
-const double _headerHeight = 52;
+
+/// Height of the placeholder plate of a skeleton (a numeral plate at the default text size).
+const double _skeletonPlateHeight = 50;
 
 /// How many times the content of any block was built (tests check that unrelated changes do not rebuild it).
 @visibleForTesting
@@ -43,6 +48,7 @@ class DiagramBlock extends StatefulWidget {
     required this.number,
     required this.actions,
     this.source,
+    this.showPeekHint = false,
   });
 
   final Diagram diagram;
@@ -54,6 +60,11 @@ class DiagramBlock extends StatefulWidget {
 
   /// The capture the diagram belongs to; the block follows its changes (reading finished, region being read).
   final SourceImage? source;
+
+  /// Whether this block carries the line "Mantén pulsado el tablero para ver el original." (until it is
+  /// dismissed). Only the first block of the session does, and only in one column: in a row of blocks a line in
+  /// one of them would push its board out of line with the others.
+  final bool showPeekHint;
 
   @override
   State<DiagramBlock> createState() => DiagramBlockState();
@@ -78,6 +89,7 @@ class DiagramBlockState extends State<DiagramBlock> {
     if (oldWidget.diagram != widget.diagram ||
         oldWidget.number != widget.number ||
         oldWidget.actions != widget.actions ||
+        oldWidget.showPeekHint != widget.showPeekHint ||
         oldWidget.source != widget.source) {
       _shell = null;
     }
@@ -110,9 +122,37 @@ class DiagramBlockState extends State<DiagramBlock> {
     );
   }
 
+  /// The square editor. While it is open the list leaves room for it under its end ([HomeActions.sheetHeight]);
+  /// with [review] the board is scrolled to the top of the list again once that room exists.
+  Future<SquareSheetResult?> _sheet(
+    int square, {
+    bool review = false,
+    ValueChanged<int>? onSquare,
+  }) async {
+    final actions = _actions;
+    final result = await showSquareSheet(
+      context,
+      diagram: _d,
+      square: square,
+      review: review,
+      onSquare: onSquare,
+      onHeight: (h) {
+        if (h == actions.sheetHeight.value) return;
+        actions.sheetHeight.value = h;
+        if (review && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _scrollToBoard();
+          });
+        }
+      },
+    );
+    actions.sheetHeight.value = 0;
+    return result;
+  }
+
   Future<void> _edit(int square) async {
     _set(() => _selected = square);
-    await showSquareSheet(context, diagram: _d, square: square);
+    await _sheet(square);
     if (mounted) _set(() => _selected = null);
   }
 
@@ -124,10 +164,8 @@ class DiagramBlockState extends State<DiagramBlock> {
     final messenger = ScaffoldMessenger.of(context);
     _set(() => _selected = first.first);
     _scrollToBoard();
-    final result = await showSquareSheet(
-      context,
-      diagram: _d,
-      square: first.first,
+    final result = await _sheet(
+      first.first,
       review: true,
       onSquare: (sq) {
         if (mounted) _set(() => _selected = sq);
@@ -230,10 +268,12 @@ class DiagramBlockState extends State<DiagramBlock> {
             ],
             const SizedBox(height: Space.sm),
             _comparator(context, canAdjust),
-            if (_d.originalCrop != null && _actions.peekHintVisible) ...[
+            if (widget.showPeekHint &&
+                _d.originalCrop != null &&
+                _actions.peekHintVisible) ...[
               const SizedBox(height: Space.xs),
               Text(
-                'Mantén pulsado el tablero para ver el original.',
+                peekHint,
                 key: const ValueKey('peek-hint'),
                 style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
@@ -256,36 +296,28 @@ class DiagramBlockState extends State<DiagramBlock> {
 
   // ------------------------------------------------------------------- header
 
-  Widget _header(BuildContext context, DiagramStatus status) {
-    final scheme = Theme.of(context).colorScheme;
-    final app = context.app;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          height: _headerHeight,
-          child: Center(
-            child: ExcludeSemantics(
-              child: Text(
-                '${widget.number}',
-                style: app.numeral.copyWith(color: scheme.primary),
-              ),
-            ),
+  /// The plate with the number and, beside it, the status centred on the plate (or from its top when it is
+  /// taller). In a row of blocks the header is as tall as the tallest one, so the boards line up.
+  Widget _header(BuildContext context, DiagramStatus status) => RowHeaderSlot(
+    child: IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.topCenter,
+            child: ExcludeSemantics(child: EnamelPlate.numeral(widget.number)),
           ),
-        ),
-        const SizedBox(width: Space.md),
-        Expanded(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: _headerHeight),
+          const SizedBox(width: Space.md),
+          Expanded(
             child: Align(
               alignment: Alignment.centerLeft,
               child: _status(context, status),
             ),
           ),
-        ),
-      ],
-    );
-  }
+        ],
+      ),
+    ),
+  );
 
   /// What is wrong, with what to do:
   ///  * impossible: the first reason, "Y N más" (the full text is the tooltip) and "Cambiar turno" when
@@ -487,14 +519,7 @@ class DiagramBlockState extends State<DiagramBlock> {
           onPressed: canAdjust ? _adjust : null,
           icon: const AppIcon(AppIcons.crop),
         ),
-        IconButton.filledTonal(
-          key: const ValueKey('flip'),
-          tooltip: black ? 'Ver desde las blancas' : 'Ver desde las negras',
-          isSelected: black,
-          onPressed: _d.rotate180,
-          icon: const AppIcon(AppIcons.flip),
-          selectedIcon: const AppIcon(AppIcons.flip),
-        ),
+        _FlipButton(selected: black, onPressed: _d.rotate180),
       ],
     );
   }
@@ -781,6 +806,40 @@ class DiagramBlockState extends State<DiagramBlock> {
   }
 }
 
+/// "Ver desde las negras": a toggle that is filled (the tuned secondary container) only while it is on. Off it is
+/// a bare icon like its neighbour "Ajustar recorte".
+class _FlipButton extends StatelessWidget {
+  const _FlipButton({required this.selected, required this.onPressed});
+
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      key: const ValueKey('flip'),
+      tooltip: selected ? 'Ver desde las blancas' : 'Ver desde las negras',
+      isSelected: selected,
+      onPressed: onPressed,
+      icon: const AppIcon(AppIcons.flip),
+      selectedIcon: const AppIcon(AppIcons.flip),
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? scheme.secondaryContainer
+              : Colors.transparent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? scheme.onSecondaryContainer
+              : scheme.onSurface,
+        ),
+      ),
+    );
+  }
+}
+
 /// The doubtful corner marks over the "Original" picture: the same amber rule and corner triangle the board
 /// draws, so the squares the reader doubted can be looked at in the book's own picture. [doubts] are by screen
 /// position (row-major from the top-left).
@@ -863,7 +922,7 @@ class _Disc extends StatelessWidget {
 // ------------------------------------------------------------------------------------------------ skeleton
 
 /// A block-shaped placeholder for a board that is located but not read yet: the same surface and metrics, the
-/// empty board of the ink where the reading will appear, bars where the text will be. It pulses softly, except
+/// empty board of the chosen stone where the reading will appear, bars where the text will be. It pulses softly, except
 /// when the system asks to remove animations.
 class DiagramSkeleton extends StatefulWidget {
   const DiagramSkeleton({super.key});
@@ -929,11 +988,11 @@ class _DiagramSkeletonState extends State<DiagramSkeleton>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(
-                      height: _headerHeight,
+                    RowHeaderSlot(
                       child: Row(
                         children: [
-                          _bar(context, 36, width: 32),
+                          // a quiet plate: the shape of the numeral plate, no enamel, no rule
+                          _bar(context, _skeletonPlateHeight, width: 62),
                           const SizedBox(width: Space.md),
                           _bar(context, 16, width: 140),
                         ],

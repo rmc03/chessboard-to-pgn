@@ -376,11 +376,6 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
             icon: const AppIcon(AppIcons.settings),
             tooltip: 'Ajustes',
           ),
-          IconButton(
-            onPressed: () {},
-            icon: const AppIcon(AppIcons.more),
-            tooltip: 'Más',
-          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -447,7 +442,7 @@ class _ComponentSpecimenState extends State<_ComponentSpecimen> {
               IconButton(
                 onPressed: () {},
                 icon: const AppIcon(AppIcons.delete),
-                tooltip: 'Eliminar',
+                tooltip: 'Quitar',
               ),
             ],
           ),

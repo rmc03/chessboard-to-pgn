@@ -62,14 +62,14 @@ void registerCropScenes() {
   registerScene(
     'crop_zoomed',
     (env) => CropPage(imageBytes: tallScreenshot(), initial: board2),
-    settings: () => AppSettings(inkId: 'torneo'),
+    settings: () => AppSettings(stoneId: 'pizarra'),
     setup: (tester, env) => _ready(tester),
     textScale13: true,
   );
   registerScene(
     'crop_loupe',
     (env) => CropPage(imageBytes: tallScreenshot(), initial: board2),
-    settings: () => AppSettings(inkId: 'granate'),
+    settings: () => AppSettings(stoneId: 'alicante'),
     desktop: false,
     setup: (tester, env) async {
       await _ready(tester);

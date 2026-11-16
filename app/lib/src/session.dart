@@ -440,7 +440,9 @@ class Session extends ChangeNotifier {
     Diagram? replacing,
   }) async {
     if (source._discarded || !_sources.contains(source)) {
-      throw const ReadFailure('Esta captura ya no está en la lista.');
+      throw const ReadFailure(
+        'Esta captura ya no está en la lista. Añádela de nuevo.',
+      );
     }
     if (source.isPending) {
       throw const ReadFailure('Espera a que termine de leerse la captura.');
@@ -458,7 +460,7 @@ class Session extends ChangeNotifier {
     }
     if (source._discarded) {
       throw const ReadFailure(
-        'La captura se quitó mientras se leía el recorte.',
+        'La captura se quitó mientras se leía el recorte. Añádela de nuevo.',
       );
     }
     final fresh = Diagram.fromRecognized(board);

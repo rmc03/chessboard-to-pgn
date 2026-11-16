@@ -5,6 +5,8 @@ import 'package:chessboard_pgn/src/export.dart';
 import 'package:chessboard_pgn/src/locate.dart';
 import 'package:chessboard_pgn/src/session.dart';
 import 'package:chessboard_pgn/src/ui/diagram_block.dart';
+import 'package:chessboard_pgn/src/ui/export_bar.dart';
+import 'package:chessboard_pgn/src/ui/plate.dart';
 import 'package:chessboard_pgn/src/ui/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -66,6 +68,43 @@ void main() {
       },
     );
 
+    testWidgets(
+      'the example carries a muted plate (stone and an outline, no enamel), "Elegir captura" is the plate button',
+      (tester) async {
+        final home = Home(sessionWith({}));
+        await home.pump(tester);
+        final plate = tester.widget<EnamelPlate>(find.byType(EnamelPlate));
+        expect(plate.muted, isTrue);
+        expect(plate.number, 1);
+        final scheme = Theme.of(tester.element(find.byType(EnamelPlate)))
+            .colorScheme;
+        final decoration =
+            tester
+                    .widget<DecoratedBox>(
+                      find
+                          .descendant(
+                            of: find.byType(EnamelPlate),
+                            matching: find.byType(DecoratedBox),
+                          )
+                          .first,
+                    )
+                    .decoration
+                as ShapeDecoration;
+        expect(decoration.color, scheme.surfaceContainerHighest);
+        expect(decoration.shape, isNot(isA<PlateBorder>()), reason: 'no rule');
+
+        final button = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Elegir captura'),
+        );
+        expect(button.style!.shape!.resolve(const {}), isA<PlateBorder>());
+        // the status line sits to the right of the plate, centred on it
+        final warn = tester.getRect(find.text('2 casillas dudosas'));
+        final rect = tester.getRect(find.byType(EnamelPlate));
+        expect(warn.left, greaterThan(rect.right));
+        expect(warn.center.dy, closeTo(rect.center.dy, 3));
+      },
+    );
+
     testWidgets('cancelling the picker changes nothing', (tester) async {
       final home = Home(sessionWith({}));
       await home.pump(tester);
@@ -117,7 +156,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
 
         // located nothing yet: one skeleton and "Buscando diagramas…"
-        expect(find.text('Captura 1'), findsOneWidget);
+        expectCaptureHeader(tester, 1);
         expect(find.text('Buscando diagramas…'), findsOneWidget);
         expect(find.byType(DiagramSkeleton), findsOneWidget);
         expect(find.byType(DiagramBlock), findsNothing);
@@ -148,7 +187,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(DiagramBlock), findsNWidgets(2));
         expect(find.byType(DiagramSkeleton), findsNothing);
-        expect(find.text('Captura 1 · 2 diagramas'), findsOneWidget);
+        expectCaptureHeader(tester, 1, '2 diagramas');
         expect(find.text('Leyendo 2 de 2…'), findsNothing);
         expect(tester.takeException(), isNull);
       },
@@ -174,12 +213,12 @@ void main() {
         final home = Home(session);
         await home.pump(tester);
         await home.addCapture(tester, 1);
-        expect(find.text('Captura 1 · 2 diagramas'), findsOneWidget);
+        expectCaptureHeader(tester, 1, '2 diagramas');
 
         // the second capture is reading (its gate is closed); a third one waits behind it
         for (var i = 0; i < 2; i++) {
           home.picks.add(Uint8List.fromList([2]));
-          await tester.tap(find.text('Añadir captura'));
+          await tester.tap(find.byKey(const ValueKey('add-capture')));
           await tester.pump(const Duration(milliseconds: 50));
         }
         expect(session.sources.map((s) => s.status), [
@@ -188,25 +227,25 @@ void main() {
           SourceStatus.queued,
         ]);
         // the list is lazy: the headers below the fold are only looked up, not asked to be on screen
-        expect(find.text('Captura 2', skipOffstage: false), findsOneWidget);
-        expect(find.text('Captura 3', skipOffstage: false), findsOneWidget);
+        expectCaptureHeader(tester, 2, null, true);
+        expectCaptureHeader(tester, 3, null, true);
         expect(find.text('En espera…', skipOffstage: false), findsOneWidget);
 
         gate.found.complete();
         gate.boards[0].complete();
         gate.finish.complete();
         await tester.pumpAndSettle();
-        expect(
-          find.text('Captura 1 · 2 diagramas', skipOffstage: false),
-          findsOneWidget,
-        );
-        expect(
-          find.text('Captura 2 · 1 diagrama', skipOffstage: false),
-          findsOneWidget,
-        );
+        expectCaptureHeader(tester, 1, '2 diagramas', true);
+        expectCaptureHeader(tester, 2, '1 diagrama', true);
         expect(session.sources.length, 3);
         expect(session.diagramCount, 4);
-        expect(find.text('4 diagramas'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(ExportBar),
+            matching: find.text('4 diagramas'),
+          ),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       },
     );
@@ -242,7 +281,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(attempts, 2);
       expect(find.byType(DiagramBlock), findsOneWidget);
-      expect(find.text('Captura 1 · 1 diagrama'), findsOneWidget);
+      expectCaptureHeader(tester, 1, '1 diagrama');
     });
 
     testWidgets('failed capture can be removed from its strip', (tester) async {
@@ -252,7 +291,7 @@ void main() {
       final home = Home(session);
       await home.pump(tester);
       await home.addCapture(tester);
-      await tester.tap(find.text('Quitar'));
+      await tester.tap(find.text('Quitar captura'));
       await tester.pumpAndSettle();
       expect(session.isEmpty, isTrue);
       expect(find.text('Elegir captura'), findsOneWidget);
@@ -280,7 +319,7 @@ void main() {
         expect(regions.single.x0, 10);
         expect(session.sources.single.status, SourceStatus.done);
         expect(find.byType(DiagramBlock), findsOneWidget);
-        expect(find.text('Captura 1 · 1 diagrama'), findsOneWidget);
+        expectCaptureHeader(tester, 1, '1 diagrama');
         expect(find.text(_noBoards), findsNothing);
       },
     );
@@ -380,21 +419,21 @@ void main() {
         final home = await two(tester);
         await tester.drag(find.byType(CustomScrollView), const Offset(0, 3000));
         await tester.pumpAndSettle();
-        expect(find.text('Captura 1 · 2 diagramas'), findsOneWidget);
+        expectCaptureHeader(tester, 1, '2 diagramas');
         await tester.tap(find.byKey(const ValueKey('capture-remove')).first);
         await tester.pumpAndSettle();
         expect(find.byType(AlertDialog), findsNothing);
         expect(home.session.sources.length, 1);
         expect(find.text('Captura 1 quitada'), findsOneWidget);
         // the remaining capture was renumbered
-        expect(find.text('Captura 1 · 1 diagrama'), findsOneWidget);
+        expectCaptureHeader(tester, 1, '1 diagrama');
 
         await tester.tap(find.text('Deshacer'));
         await tester.pumpAndSettle();
         expect(home.session.sources.length, 2);
         expect(home.session.diagramCount, 3);
-        expect(find.text('Captura 1 · 2 diagramas'), findsOneWidget);
-        expect(find.text('Captura 2 · 1 diagrama'), findsOneWidget);
+        expectCaptureHeader(tester, 1, '2 diagramas');
+        expectCaptureHeader(tester, 2, '1 diagrama');
       },
     );
 
@@ -427,13 +466,13 @@ void main() {
         expect(find.byType(AlertDialog), findsNothing);
         expect(home.session.isEmpty, isTrue);
         expect(find.text('Elegir captura'), findsOneWidget);
-        expect(find.text('Sesión vaciada'), findsOneWidget);
+        expect(find.text('Capturas quitadas'), findsOneWidget);
 
         await tester.tap(find.text('Deshacer'));
         await tester.pumpAndSettle();
         expect(home.session.sources.length, 2);
         expect(home.session.diagramCount, 3);
-        expect(find.text('Captura 2 · 1 diagrama'), findsOneWidget);
+        expectCaptureHeader(tester, 2, '1 diagrama');
       },
     );
 
@@ -501,7 +540,7 @@ void main() {
       await home.addCapture(tester, 3); // failed
       expectNone('failed strip');
       home.picks.add(Uint8List.fromList([4]));
-      await tester.tap(find.byType(FloatingActionButton));
+      await tester.tap(find.byKey(const ValueKey('add-capture')));
       await tester.pump(const Duration(milliseconds: 50));
       gate.found.complete();
       await tester.pump(const Duration(milliseconds: 50));
@@ -535,7 +574,13 @@ void main() {
       'shows the count and passes the combined PGN and the file name to the saver',
       (tester) async {
         final home = await one(tester);
-        expect(find.text('2 diagramas'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(ExportBar),
+            matching: find.text('2 diagramas'),
+          ),
+          findsOneWidget,
+        );
         await tester.tap(find.byKey(const ValueKey('save-pgn')));
         await tester.pumpAndSettle();
         final (name, bytes) = home.saved.single;
@@ -626,7 +671,13 @@ void main() {
         );
         await home.pump(tester, canShare: false);
         await home.addCapture(tester);
-        expect(find.text('3 diagramas'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(ExportBar),
+            matching: find.text('3 diagramas'),
+          ),
+          findsOneWidget,
+        );
         expect(find.text('2 con avisos'), findsOneWidget);
         final warn = tester.widget<Text>(find.text('2 con avisos'));
         expect(

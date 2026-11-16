@@ -35,10 +35,11 @@ class CropPalette {
   /// Dim over what is outside the rectangle.
   final Color scrim;
 
-  /// Ink colour of the active handle halo.
+  /// Colour of the active handle halo.
   final Color accent;
 
-  /// The two strokes of the outline: they must show on white paper and on dark print.
+  /// The two strokes of the outline: a white casing ([light]) and a park-bench green core ([dark]), so the
+  /// frame shows on white paper (the green) and on dark print (the white).
   final Color light, dark;
 }
 
@@ -362,7 +363,6 @@ class _CropCanvasState extends State<CropCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Focus(
       focusNode: widget.focusNode,
       autofocus: true,
@@ -390,7 +390,7 @@ class _CropCanvasState extends State<CropCanvas> {
                   MediaQuery.devicePixelRatioOf(context),
                 ),
                 foregroundPainter: widget.showFocusRing
-                    ? _FocusRingPainter(scheme.primary)
+                    ? _FocusRingPainter(widget.palette.light)
                     : null,
               );
             },
@@ -508,12 +508,12 @@ class _CropPainter extends CustomPainter {
           ..moveTo(sel.left, sel.top + cell.dy * i)
           ..lineTo(sel.right, sel.top + cell.dy * i);
       }
-      canvas.drawPath(lines, _stroke(p.dark.withValues(alpha: 0.35), 2));
-      canvas.drawPath(lines, _stroke(p.light.withValues(alpha: 0.55), 1));
+      canvas.drawPath(lines, _stroke(p.light.withValues(alpha: 0.45), 2));
+      canvas.drawPath(lines, _stroke(p.dark.withValues(alpha: 0.7), 1));
     }
-    // Double stroke: dark casing + light core, readable on white paper and on dark print.
-    canvas.drawRect(sel, _stroke(p.dark, 3.5));
-    canvas.drawRect(sel, _stroke(p.light, 1.5));
+    // Double stroke: white casing + green core, readable on white paper and on dark print.
+    canvas.drawRect(sel, _stroke(p.light, 4.5));
+    canvas.drawRect(sel, _stroke(p.dark, 2));
   }
 
   static Paint _stroke(
@@ -546,7 +546,7 @@ class _CropPainter extends CustomPainter {
           26,
           Paint()..color = p.accent.withValues(alpha: 0.38),
         );
-        canvas.drawCircle(at, 26, _stroke(p.light, 1.5));
+        canvas.drawCircle(at, 26, _stroke(p.light, 2));
       }
       final path = Path();
       if (h.isCorner) {
@@ -564,8 +564,8 @@ class _CropPainter extends CustomPainter {
           ..moveTo(at.dx, at.dy - _pill / 2)
           ..lineTo(at.dx, at.dy + _pill / 2);
       }
-      canvas.drawPath(path, _stroke(p.dark, 7, cap: StrokeCap.round));
-      canvas.drawPath(path, _stroke(p.light, 3.5, cap: StrokeCap.round));
+      canvas.drawPath(path, _stroke(p.light, 7, cap: StrokeCap.round));
+      canvas.drawPath(path, _stroke(p.dark, 3.5, cap: StrokeCap.round));
     }
   }
 
@@ -594,8 +594,8 @@ class _CropPainter extends CustomPainter {
       grid: false,
     );
     canvas.restore();
-    canvas.drawCircle(centre, r, _stroke(p.dark, 5));
-    canvas.drawCircle(centre, r, _stroke(p.light, 2.5));
+    canvas.drawCircle(centre, r, _stroke(p.light, 5));
+    canvas.drawCircle(centre, r, _stroke(p.dark, 2.5));
   }
 
   @override

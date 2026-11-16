@@ -36,6 +36,9 @@ Future<Uint8List?> pickFromGallery() async {
   return file?.readAsBytes();
 }
 
+/// The hint about the press-and-hold peek at the original (in the first block, or once in a snackbar).
+const String peekHint = 'Mantén pulsado el tablero para ver el original.';
+
 class HomeActions extends ChangeNotifier {
   HomeActions({
     required this.session,
@@ -76,6 +79,16 @@ class HomeActions extends ChangeNotifier {
   /// Scrolls the list to [diagram] (and opens its review) wherever the screen is; a no-op without a screen.
   Future<void> goToDiagram(Diagram diagram, {bool review = false}) async =>
       onRevealDiagram?.call(diagram, review: review);
+
+  /// Height of the square editor while it is open (0 otherwise). The list leaves that much room under its end,
+  /// so the board being edited can be scrolled clear of the sheet even when the list is short.
+  final ValueNotifier<double> sheetHeight = ValueNotifier(0);
+
+  @override
+  void dispose() {
+    sheetHeight.dispose();
+    super.dispose();
+  }
 
   bool _peekHintDismissed = false;
 
@@ -208,7 +221,10 @@ class HomeActions extends ChangeNotifier {
     await Clipboard.setData(
       ClipboardData(text: exporter.lichessAnalysisUri(fen).toString()),
     );
-    toast(messenger, 'No se pudo abrir Lichess. Enlace copiado.');
+    toast(
+      messenger,
+      'No se pudo abrir Lichess. Enlace copiado: pégalo en el navegador.',
+    );
   }
 
   /// "Guardar .pgn": the PGN of every diagram, through the system save dialog.
@@ -290,7 +306,7 @@ class HomeActions extends ChangeNotifier {
         await _shareFile(exporter.pgnFileName(_now()), exporter.pgnBytes(pgn));
       }
     } catch (_) {
-      toast(messenger, 'No se pudo compartir. Inténtalo de nuevo.');
+      toast(messenger, 'No se pudo compartir. Prueba otra vez o copia el PGN.');
     }
   }
 }

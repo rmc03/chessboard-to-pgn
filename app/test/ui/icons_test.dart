@@ -87,6 +87,7 @@ void main() {
     expect(AppIcons.privacy, HugeIcons.strokeRoundedSquareLock02);
     expect(AppIcons.licenses, HugeIcons.strokeRoundedLicense);
     expect(AppIcons.noBoard, HugeIcons.strokeRoundedSearch01);
+    expect(AppIcons.back, HugeIcons.strokeRoundedArrowLeft01);
   });
 
   test('the Hugeicons licence ships with the package, which Flutter collects into the app licences', () {
@@ -125,5 +126,5 @@ void main() {
       }
     }
     expect(offenders, isEmpty, reason: offenders.join('\n'));
-  }, skip: 'enabled after the screens pass');
+  });
 }

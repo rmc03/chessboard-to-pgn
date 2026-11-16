@@ -159,7 +159,9 @@ Future<void> _add(WidgetTester tester, List<Capture> captures) async {
   for (final (i, c) in captures.indexed) {
     _picks.add(c.bytes);
     await tester.tap(
-      i == 0 ? find.text('Elegir captura') : find.byType(FloatingActionButton),
+      i == 0
+          ? find.text('Elegir captura')
+          : find.byKey(const ValueKey('add-capture')),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));

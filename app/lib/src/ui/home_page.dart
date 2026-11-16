@@ -1,9 +1,11 @@
 // Home / session screen (docs/ux-spec.md, 4.1): the first-run composition, then the captures read so far as
-// groups of diagram blocks, with the "Añadir captura" FAB, the export bar and, at the end of the list, "Quitar
-// todas las capturas". No overflow menus anywhere: every action is a visible button.
+// groups of diagram blocks, with "Añadir captura", the export bar and, at the end of the list, "Quitar todas las
+// capturas". No overflow menus anywhere: every action is a visible button.
 //
-//   < 600 dp   one column            >= 840 dp   two columns (and the FAB docks in the export bar)
-//   >= 1240 dp three columns         blocks never grow past [blockMaxWidth]
+//   < 600 dp   one column; with the export bar, "Añadir captura" is a plate-shaped icon button at the end of the
+//              bar (a floating button would cover the blocks), without it the extended plate FAB floats
+//   >= 600 dp  the extended FAB is docked at the end of the export bar
+//   >= 840 dp  two columns           >= 1240 dp three columns        blocks never grow past [blockMaxWidth]
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -22,6 +24,7 @@ import 'equal_row.dart';
 import 'export_bar.dart';
 import 'home_actions.dart';
 import 'icons.dart';
+import 'plate.dart';
 import 'scope.dart';
 import 'settings_page.dart';
 import 'theme.dart';
@@ -71,24 +74,13 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final ScrollController _scroll = ScrollController();
-  final ValueNotifier<bool> _scrolled = ValueNotifier(false);
   final Map<int, GlobalKey> _headerKeys = {};
   final Map<Diagram, GlobalKey<DiagramBlockState>> _blockKeys = {};
-  final GlobalKey _fabKey = GlobalKey();
-  double _fabHeight = 56;
+  bool _peekToastQueued = false;
   HomeActions? _actions;
 
   HomeActions get actions => _actions!;
   Session get session => actions.session;
-
-  @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(() {
-      final away = _scroll.hasClients && _scroll.offset > 8;
-      if (away != _scrolled.value) _scrolled.value = away;
-    });
-  }
 
   @override
   void didChangeDependencies() {
@@ -116,7 +108,6 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _actions?.dispose();
     _scroll.dispose();
-    _scrolled.dispose();
     super.dispose();
   }
 
@@ -210,19 +201,28 @@ class _HomePageState extends State<HomePage> {
     if (cleared == null) return;
     actions.toast(
       messenger,
-      'Sesión vaciada',
+      'Capturas quitadas',
       action: cleared.isEmpty ? null : 'Deshacer',
       onAction: () => session.restoreCleared(cleared),
       duration: const Duration(seconds: 6),
     );
   }
 
-  /// Keeps the list's bottom padding equal to the real FAB.
-  void _measureFab() {
+  /// On a window with several columns the hint "Mantén pulsado el tablero para ver el original." cannot live in
+  /// a block (the boards of a row would stop lining up): the first time a diagram has an original it is said once
+  /// in a snackbar instead.
+  void _queuePeekToast() {
+    if (_peekToastQueued) return;
+    _peekToastQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final h = _fabKey.currentContext?.size?.height;
-      if (h != null && h != _fabHeight) setState(() => _fabHeight = h);
+      _peekToastQueued = false;
+      if (!mounted || !actions.peekHintVisible) return;
+      actions.toast(
+        ScaffoldMessenger.of(context),
+        peekHint,
+        duration: const Duration(seconds: 6),
+      );
+      actions.dismissPeekHint();
     });
   }
 
@@ -244,10 +244,17 @@ class _HomePageState extends State<HomePage> {
           builder: (context, _) {
             final width = MediaQuery.sizeOf(context).width;
             final wide = width >= Breakpoint.expanded;
+            final phone = width < Breakpoint.medium;
             final empty = session.isEmpty;
             final hasBar = session.diagramCount > 0;
-            final docked = wide && hasBar;
-            if (!empty) _measureFab();
+            // Where "Añadir captura" lives: in the export bar (an icon button on a phone, the extended FAB from
+            // 600 dp) while there is a bar, floating over the list only while there is none yet.
+            final floating = !empty && !hasBar;
+            if (wide &&
+                actions.peekHintVisible &&
+                session.diagrams.any((d) => d.originalCrop != null)) {
+              _queuePeekToast();
+            }
             return Scaffold(
               backgroundColor: scheme.surface,
               appBar: AppBar(
@@ -268,13 +275,16 @@ class _HomePageState extends State<HomePage> {
                           (widget.platform ?? defaultTargetPlatform) ==
                           TargetPlatform.android,
                     )
-                  : _list(context, floatingFab: !docked),
-              floatingActionButton: empty || docked ? null : _fab(false),
+                  : _list(context, floatingFab: floating, inline: !wide),
+              floatingActionButton: floating ? _fab() : null,
               bottomNavigationBar: hasBar
                   ? ExportBar(
                       actions: actions,
                       horizontalPadding: wide ? _sidePadding(width) : null,
-                      trailing: docked ? _fab(true) : null,
+                      trailing: phone ? _addButton() : _fab(),
+                      trailingWidth: phone
+                          ? minTarget
+                          : ExportBar.extendedFabWidth(context),
                       onWarnings: _onWarnings,
                     )
                   : null,
@@ -285,37 +295,30 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// "Añadir captura": the extended FAB. On a phone it shrinks to the 56 dp icon FAB once the list has been
-  /// scrolled away from the top, or when the text size is large (the label would take half the screen).
-  Widget _fab(bool docked) => KeyedSubtree(
-    key: docked ? null : _fabKey,
-    child: ValueListenableBuilder<bool>(
-      valueListenable: _scrolled,
-      builder: (context, scrolled, _) {
-        final width = MediaQuery.sizeOf(context).width;
-        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-        final compact =
-            width < Breakpoint.medium && (scrolled || scale >= 1.15);
-        void add() => unawaited(actions.pick(context));
-        return AnimatedSwitcher(
-          duration: Motion.of(context, Motion.fast),
-          child: compact
-              ? FloatingActionButton(
-                  key: const ValueKey('fab-compact'),
-                  heroTag: null,
-                  tooltip: 'Añadir captura',
-                  onPressed: add,
-                  child: const AppIcon(AppIcons.addCapture),
-                )
-              : FloatingActionButton.extended(
-                  key: const ValueKey('fab-extended'),
-                  heroTag: null,
-                  onPressed: add,
-                  icon: const AppIcon(AppIcons.addCapture),
-                  label: const Text('Añadir captura'),
-                ),
-        );
-      },
+  void _add() => unawaited(actions.pick(context));
+
+  /// "Añadir captura": the extended plate FAB (floating, or docked in the export bar).
+  Widget _fab() => FloatingActionButton.extended(
+    key: const ValueKey('add-capture'),
+    heroTag: null,
+    onPressed: _add,
+    icon: const AppIcon(AppIcons.addCapture),
+    label: const Text('Añadir captura'),
+  );
+
+  /// "Añadir captura" on a phone, at the end of the export bar: a 48 dp plate (the shape of the FAB, without its
+  /// label) so nothing floats over the blocks.
+  Widget _addButton() => Builder(
+    builder: (context) => IconButton.filled(
+      key: const ValueKey('add-capture'),
+      tooltip: 'Añadir captura',
+      onPressed: _add,
+      icon: const AppIcon(AppIcons.addCapture),
+      style: plateButtonStyle(context).copyWith(
+        fixedSize: const WidgetStatePropertyAll(Size.square(minTarget)),
+        minimumSize: const WidgetStatePropertyAll(Size.square(minTarget)),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
     ),
   );
 
@@ -329,6 +332,9 @@ class _HomePageState extends State<HomePage> {
 
   static const double _gap = Space.lg;
 
+  /// Height of the extended FAB.
+  static const double _fabHeight = 56;
+
   static double _contentWidth(double width) {
     final cols = _columnsFor(width);
     return math.min(
@@ -340,7 +346,11 @@ class _HomePageState extends State<HomePage> {
   static double _sidePadding(double width) =>
       (width - _contentWidth(width)) / 2;
 
-  Widget _list(BuildContext context, {required bool floatingFab}) {
+  Widget _list(
+    BuildContext context, {
+    required bool floatingFab,
+    required bool inline,
+  }) {
     final padding = MediaQuery.paddingOf(context);
     return LayoutBuilder(
       builder: (context, c) {
@@ -350,10 +360,10 @@ class _HomePageState extends State<HomePage> {
           _sidePadding(width),
           math.max(padding.left, padding.right),
         );
-        // The FAB floats over the end of the list: the padding is its real height plus the margin the Scaffold
-        // leaves under it and the same again above it, so the last block's actions stay clear of it. (The bar is
-        // not part of this: the Scaffold lays the list out above it.)
-        final bottom = floatingFab
+        // The FAB floats over the end of the list only while there is no export bar (the first capture is still
+        // being read): the padding is its height plus the margin the Scaffold leaves under it and the same
+        // again above it. (The bar is not part of this: the Scaffold lays the list out above it.)
+        final room = floatingFab
             ? _fabHeight + 2 * Space.lg + padding.bottom
             : Space.xl;
         final sources = session.sources;
@@ -370,6 +380,7 @@ class _HomePageState extends State<HomePage> {
               first: identical(source, sources.first),
               before: before,
               columns: cols,
+              inlineHint: inline,
               actions: actions,
               headerKey: _headerKey(source),
               blockKey: _blockKey,
@@ -378,27 +389,31 @@ class _HomePageState extends State<HomePage> {
           );
           before += source.diagrams.length;
         }
-        return CustomScrollView(
-          controller: _scroll,
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(side, 0, side, bottom),
-              sliver: SliverMainAxisGroup(
-                slivers: [
-                  ...groups,
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: Space.sm),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: _ClearAll(onPressed: _clearAll),
+        return ValueListenableBuilder<double>(
+          // while the square editor is open the list can be scrolled past its end by the height of the sheet
+          valueListenable: actions.sheetHeight,
+          builder: (context, sheet, _) => CustomScrollView(
+            controller: _scroll,
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(side, 0, side, room + sheet),
+                sliver: SliverMainAxisGroup(
+                  slivers: [
+                    ...groups,
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: Space.sm),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _ClearAll(onPressed: _clearAll),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -437,6 +452,7 @@ class _GroupHost extends StatefulWidget {
     required this.first,
     required this.before,
     required this.columns,
+    required this.inlineHint,
     required this.actions,
     required this.headerKey,
     required this.blockKey,
@@ -449,6 +465,9 @@ class _GroupHost extends StatefulWidget {
   /// Diagrams in the captures before this one (the numbers go on from there).
   final int before;
   final int columns;
+
+  /// The hint about pressing and holding the board goes in the first block (a window with one column).
+  final bool inlineHint;
   final HomeActions actions;
   final GlobalKey headerKey;
   final GlobalKey<DiagramBlockState> Function(Diagram) blockKey;
@@ -470,6 +489,7 @@ class _GroupHostState extends State<_GroupHost> {
         old.first != widget.first ||
         old.before != widget.before ||
         old.columns != widget.columns ||
+        old.inlineHint != widget.inlineHint ||
         old.actions != widget.actions) {
       _shell = null;
     }
@@ -503,6 +523,7 @@ class _GroupHostState extends State<_GroupHost> {
           number: widget.before + i + 1,
           actions: widget.actions,
           source: source,
+          showPeekHint: widget.inlineHint && widget.first && i == 0,
         );
       }
       return DiagramSkeleton(
@@ -597,16 +618,21 @@ class _CaptureHeader extends StatelessWidget {
                 CaptureThumb(source: source),
                 const SizedBox(width: Space.sm),
                 Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      done
-                          ? '${source.title} · ${source.diagramCountText}'
-                          : source.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: text.titleMedium,
-                    ),
+                  // the plate, then the count; at a narrow width or a large text the count goes under the plate
+                  child: Wrap(
+                    spacing: Space.sm,
+                    runSpacing: Space.xs,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Semantics(
+                        header: true,
+                        label: source.title,
+                        excludeSemantics: true,
+                        child: EnamelPlate.label(source.title.toUpperCase()),
+                      ),
+                      if (done)
+                        Text(source.diagramCountText, style: text.bodyLarge),
+                    ],
                   ),
                 ),
                 IconButton(
@@ -715,7 +741,7 @@ class _StatusStrip extends StatelessWidget {
         TextButton(
           style: TextButton.styleFrom(foregroundColor: fg),
           onPressed: onRemove,
-          child: const Text('Quitar'),
+          child: const Text('Quitar captura'),
         ),
       ],
     );
@@ -766,7 +792,16 @@ class _EmptyState extends StatelessWidget {
         final width = c.maxWidth;
         final wide = width >= Breakpoint.expanded;
         final gutter = Space.gutter(width);
-        final example = _Example(maxSide: wide ? 440 : 400);
+        // On a phone the example board gives way to what is below it, so "Elegir captura" stays in the first
+        // screen (large text, short phones): the rest of the screen (card, steps, button, privacy line) takes
+        // about 430 dp at the default text size and 130 dp more per 1.0 of text scale.
+        final scale = MediaQuery.textScalerOf(context).scale(10) / 10;
+        final example = _Example(
+          maxSide: wide ? 440 : 400,
+          maxBoard: wide
+              ? double.infinity
+              : math.max(200, c.maxHeight - (430 + 130 * (scale - 1))),
+        );
         final guide = _Guide(onPick: onPick, wide: wide, android: android);
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
@@ -825,9 +860,12 @@ class _EmptyState extends StatelessWidget {
 /// A diagram block in miniature: numeral, status with the doubtful squares the product points out, and the
 /// board of the current stone and pieces. It is labelled "Ejemplo" and its numeral is muted: it is not yours.
 class _Example extends StatelessWidget {
-  const _Example({required this.maxSide});
+  const _Example({required this.maxSide, required this.maxBoard});
 
   final double maxSide;
+
+  /// The most the board may take (dp), whatever the width.
+  final double maxBoard;
 
   @override
   Widget build(BuildContext context) {
@@ -852,12 +890,7 @@ class _Example extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        '1',
-                        style: app.numeral.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
+                      const EnamelPlate.numeral(1, muted: true),
                       const SizedBox(width: Space.md),
                       AppIcon(AppIcons.warning, size: 20, color: app.warning),
                       const SizedBox(width: Space.sm),
@@ -881,11 +914,13 @@ class _Example extends StatelessWidget {
                   ),
                   const SizedBox(height: Space.md),
                   LayoutBuilder(
-                    builder: (context, c) => BoardView.fromGrid(
-                      grid: sampleGrid(),
-                      doubtful: (sq) => sq == 21 || sq == 18,
-                      size: c.maxWidth,
-                      semanticLabel: 'Ejemplo de tablero',
+                    builder: (context, c) => Center(
+                      child: BoardView.fromGrid(
+                        grid: sampleGrid(),
+                        doubtful: (sq) => sq == 21 || sq == 18,
+                        size: math.min(c.maxWidth, maxBoard),
+                        semanticLabel: 'Ejemplo de tablero',
+                      ),
                     ),
                   ),
                 ],
@@ -954,6 +989,7 @@ class _Guide extends StatelessWidget {
             ),
           const SizedBox(height: Space.xl),
           FilledButton.icon(
+            style: plateButtonStyle(context),
             onPressed: onPick,
             icon: const AppIcon(AppIcons.addCapture),
             label: const Text('Elegir captura'),

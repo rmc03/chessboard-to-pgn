@@ -34,6 +34,7 @@ class AppTheme extends ThemeExtension<AppTheme> {
     required this.onShell,
     required this.plate,
     required this.onPlate,
+    required this.stage,
     required this.stoneFrame,
     required this.boardLight,
     required this.boardDark,
@@ -66,6 +67,10 @@ class AppTheme extends ThemeExtension<AppTheme> {
 
   /// Enamel of the plates, the FAB and the primary button, and the off-white of their inner rule and text.
   final Color plate, onPlate;
+
+  /// Basalt behind a picture that is being worked on (the crop screen): dark in both themes, so a white page
+  /// of a book sits on it like paper on a stone slab.
+  final Color stage;
 
   /// Body colour of the polished granite frame of the board (the same in light and dark).
   final Color stoneFrame;
@@ -122,6 +127,7 @@ class AppTheme extends ThemeExtension<AppTheme> {
     Color? onShell,
     Color? plate,
     Color? onPlate,
+    Color? stage,
     Color? stoneFrame,
     Color? boardLight,
     Color? boardDark,
@@ -145,6 +151,7 @@ class AppTheme extends ThemeExtension<AppTheme> {
     onShell: onShell ?? this.onShell,
     plate: plate ?? this.plate,
     onPlate: onPlate ?? this.onPlate,
+    stage: stage ?? this.stage,
     stoneFrame: stoneFrame ?? this.stoneFrame,
     boardLight: boardLight ?? this.boardLight,
     boardDark: boardDark ?? this.boardDark,
@@ -175,6 +182,7 @@ class AppTheme extends ThemeExtension<AppTheme> {
       onShell: mix(onShell, other.onShell),
       plate: mix(plate, other.plate),
       onPlate: mix(onPlate, other.onPlate),
+      stage: mix(stage, other.stage),
       stoneFrame: mix(stoneFrame, other.stoneFrame),
       boardLight: mix(boardLight, other.boardLight),
       boardDark: mix(boardDark, other.boardDark),
@@ -451,6 +459,7 @@ class _Extra {
     required this.onShell,
     required this.plate,
     required this.onPlate,
+    required this.stage,
   });
 
   final Color warning,
@@ -458,7 +467,7 @@ class _Extra {
       warningContainer,
       onWarningContainer,
       warningMark;
-  final Color shell, onShell, plate, onPlate;
+  final Color shell, onShell, plate, onPlate, stage;
 }
 
 const _Extra _lightExtra = _Extra(
@@ -473,6 +482,7 @@ const _Extra _lightExtra = _Extra(
   onShell: Color(0xFFF4F1E8),
   plate: Color(0xFF1F5C46),
   onPlate: Color(0xFFF7F5EE),
+  stage: Color(0xFF0F1411), // basalt, as the dark page
 );
 
 const _Extra _darkExtra = _Extra(
@@ -485,6 +495,7 @@ const _Extra _darkExtra = _Extra(
   onShell: Color(0xFFE6EDE6),
   plate: Color(0xFF266A52), // one enamel for plates, FAB and primary button (lighter than the shell to read on basalt)
   onPlate: Color(0xFFF4F7F2),
+  stage: Color(0xFF0F1411),
 );
 
 // ----------------------------------------------------------------------------------------------- theme
@@ -512,6 +523,7 @@ ThemeData buildTheme(Stone stone, Brightness brightness) {
     onShell: extra.onShell,
     plate: extra.plate,
     onPlate: extra.onPlate,
+    stage: extra.stage,
     stoneFrame: BoardMarks.frame,
     boardLight: stone.lightSquare,
     boardDark: stone.darkSquare,

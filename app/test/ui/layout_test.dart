@@ -1,6 +1,9 @@
 // Layout of the session screen: columns by width, block width cap, no overflow at large text, long lists.
 import 'package:chessboard_pgn/src/session.dart';
 import 'package:chessboard_pgn/src/ui/diagram_block.dart';
+import 'package:chessboard_pgn/src/ui/equal_row.dart';
+import 'package:chessboard_pgn/src/ui/export_bar.dart';
+import 'package:chessboard_pgn/src/ui/home_actions.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -98,35 +101,41 @@ void main() {
     }
     expect(tops.toSet().length, 1);
     expect(heights.toSet().length, 1, reason: '$heights');
-    // header height is fixed, so the boards sit at the same height even when statuses differ; the one block
-    // with an original also shows the hint line under its comparator
+    // the header of a row is as tall as its tallest one (here: the review row of block 1, the impossible
+    // position of block 2), so the boards sit at the same height whatever the statuses are
     expect(
       boardTops.map((y) => y.round()).toSet().length,
-      2,
-      reason: 'one block shows the hint: $boardTops',
+      1,
+      reason: '$boardTops',
     );
-    // ... until the hint is dismissed (first peek or first tap on Original): then the boards line up
-    await tester.tap(find.text('Original').first);
-    await tester.pumpAndSettle();
-    final after = [
+    final headers = [
       for (var i = 0; i < 3; i++)
         tester
-            .getTopLeft(
+            .getSize(
               find.descendant(
                 of: blocks.at(i),
-                matching: find.byKey(const ValueKey('square-0')),
+                matching: find.byType(RowHeaderSlot),
               ),
             )
-            .dy
+            .height
             .round(),
     ];
-    expect(after.toSet().length, 1, reason: '$after');
+    expect(headers.toSet().length, 1, reason: '$headers');
+    expect(headers.first, greaterThanOrEqualTo(48));
+    // no hint inside the blocks of a row: it would push one board out of line (it is a snackbar instead)
+    expect(
+      find.descendant(
+        of: find.byType(DiagramBlock),
+        matching: find.text(peekHint),
+      ),
+      findsNothing,
+    );
     // the FEN lines sit at the bottom of the equal-height blocks
     expect(bottoms.map((y) => y.round()).toSet().length, 1, reason: '$bottoms');
   });
 
   testWidgets(
-    'the last block\'s actions are not covered by the FAB (scroll padding)',
+    'the last block\'s actions are not covered by anything (no FAB over the list, only the export bar)',
     (tester) async {
       await _session(tester, size: const Size(412, 915));
       await tester.fling(
@@ -135,19 +144,39 @@ void main() {
         5000,
       );
       await tester.pumpAndSettle();
-      final fab = tester.getRect(find.byType(FloatingActionButton));
+      expect(find.byType(FloatingActionButton), findsNothing);
       final last = find.byType(DiagramBlock).last;
-      final fen = tester.getRect(
+      final list = tester.getRect(find.byType(CustomScrollView));
+      for (final target in [
         find.descendant(
           of: last,
           matching: find.byKey(const ValueKey('fen-line')),
         ),
-      );
-      final lichess = tester.getRect(
         find.descendant(of: last, matching: find.text('Analizar en Lichess')),
+      ]) {
+        expect(target.hitTestable(), findsOneWidget);
+        expect(tester.getRect(target).bottom, lessThanOrEqualTo(list.bottom));
+      }
+    },
+  );
+
+  testWidgets(
+    'on a window with several columns the peek hint is said once in a snackbar, not inside the blocks',
+    (tester) async {
+      await _session(tester, size: const Size(1300, 3000));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text(peekHint), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.text(peekHint),
+        ),
+        findsOneWidget,
       );
-      expect(fab.overlaps(fen), isFalse);
-      expect(fab.overlaps(lichess), isFalse);
+      // said once: after it is gone it does not come back
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(find.text(peekHint), findsNothing);
     },
   );
 
@@ -169,7 +198,13 @@ void main() {
       }
       await tester.pumpAndSettle();
       // the export bar stays one row: the count and the icon buttons are fully visible
-      expect(find.text('3 diagramas'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(ExportBar),
+          matching: find.text('3 diagramas'),
+        ),
+        findsOneWidget,
+      );
       expect(find.byTooltip('Guardar .pgn'), findsOneWidget);
       final bar = tester.getRect(find.byKey(const ValueKey('copy-all')));
       expect(bar.right, lessThanOrEqualTo(360));

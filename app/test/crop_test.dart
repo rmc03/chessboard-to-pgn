@@ -3,6 +3,9 @@ import 'package:chessboard_pgn/src/locate.dart';
 import 'package:chessboard_pgn/src/ui/crop_canvas.dart';
 import 'package:chessboard_pgn/src/ui/crop_controller.dart';
 import 'package:chessboard_pgn/src/ui/crop_geometry.dart';
+import 'package:chessboard_pgn/src/ui/icons.dart';
+import 'package:chessboard_pgn/src/ui/plate.dart';
+import 'package:chessboard_pgn/src/ui/theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -268,7 +271,11 @@ void main() {
       );
       expect(find.text('Restablecer'), findsOneWidget);
       expect(find.text('Leer este tablero'), findsOneWidget);
-      expect(find.byIcon(Icons.close), findsOneWidget);
+      expect(find.byTooltip('Cerrar'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is AppIcon && w.icon == AppIcons.close),
+        findsOneWidget,
+      );
     });
 
     testWidgets(
@@ -320,11 +327,45 @@ void main() {
       expect(ctrl(tester).rect.width, closeTo(280, 1e-6));
     });
 
+    testWidgets(
+      'Plaza chrome: AppIcons on the zoom buttons, a plate for "Leer este tablero", basalt behind the picture',
+      (tester) async {
+        await openCrop(tester);
+        for (final (key, icon) in [
+          ('zoom-in', AppIcons.zoomIn),
+          ('zoom-out', AppIcons.zoomOut),
+          ('zoom-fit', AppIcons.fitAll),
+        ]) {
+          expect(
+            find.descendant(
+              of: find.byKey(ValueKey(key)),
+              matching: find.byWidgetPredicate(
+                (w) => w is AppIcon && w.icon == icon,
+              ),
+            ),
+            findsOneWidget,
+            reason: key,
+          );
+        }
+        final accept = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('crop-accept')),
+        );
+        expect(accept.style!.shape!.resolve(const {}), isA<PlateBorder>());
+        final app = AppTheme.of(tester.element(find.byType(CropPage)));
+        final palette = tester
+            .widget<CropCanvas>(find.byType(CropCanvas))
+            .palette;
+        expect(palette.canvas, app.stage);
+        expect(palette.dark, app.shell, reason: 'green core of the frame');
+        expect(palette.light, app.onPlate, reason: 'white casing of the frame');
+      },
+    );
+
     testWidgets('close returns null (X, Escape and system back)', (
       tester,
     ) async {
       var o = await openCrop(tester);
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(find.byTooltip('Cerrar'));
       await tester.pumpAndSettle();
       expect(o.closed, isTrue);
       expect(o.result, isNull);

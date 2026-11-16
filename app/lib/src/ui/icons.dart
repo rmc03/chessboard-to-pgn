@@ -80,9 +80,6 @@ abstract final class AppIcons {
   static const AppIconData licenses = HugeIcons.strokeRoundedLicense;
   static const AppIconData noBoard = HugeIcons.strokeRoundedSearch01;
 
-  /// Overflow menu (⋮). Not in the dictionary table: the three-dots menu is the one Material convention kept.
-  static const AppIconData more = HugeIcons.strokeRoundedMoreVertical;
-
-  /// Back arrow of a pushed screen.
+  /// Back arrow of the app bar of a pushed screen (the theme's `actionIconTheme` draws it).
   static const AppIconData back = HugeIcons.strokeRoundedArrowLeft01;
 }

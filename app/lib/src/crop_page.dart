@@ -4,6 +4,10 @@
 // Pieces: ui/crop_geometry.dart (pure maths), ui/crop_controller.dart (state), ui/crop_canvas.dart (the single
 // gesture layer, painter and loupe). This file is the page around them: app bar, bottom bar, zoom buttons,
 // keyboard focus, semantics.
+//
+// Plaza world: the picture lies on basalt (the same dark stage in both themes, like paper on a stone slab), the
+// bars are the shell green and the stone, the frame and its handles are park-bench green with a white casing
+// (visible on white paper and on dark print), and "Leer este tablero" is the plate of the screen.
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart' show RendererBinding;
@@ -14,6 +18,9 @@ import 'package:material_ui/material_ui.dart';
 import 'locate.dart';
 import 'ui/crop_canvas.dart';
 import 'ui/crop_controller.dart';
+import 'ui/icons.dart';
+import 'ui/plate.dart';
+import 'ui/theme.dart';
 import 'ui/tokens.dart';
 
 /// Opens the crop page; the chosen rectangle in image pixels, or null when the user cancels.
@@ -106,7 +113,7 @@ class _CropPageState extends State<CropPage>
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final app = AppTheme.of(context);
     final c = _c;
     c?.animationDuration = Motion.of(context, Motion.medium);
 
@@ -115,7 +122,7 @@ class _CropPageState extends State<CropPage>
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
-            icon: const Icon(Icons.close),
+            icon: const AppIcon(AppIcons.close),
             tooltip: 'Cerrar',
             onPressed: _close,
           ),
@@ -124,29 +131,34 @@ class _CropPageState extends State<CropPage>
         body: Column(
           children: [
             Expanded(
-              child: _error != null
-                  ? const _Message('No se pudo leer la imagen.')
-                  : c == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : _Stage(
-                      controller: c,
-                      focusNode: _focus,
-                      onAccept: _accept,
-                      palette: CropPalette(
-                        canvas: Color.alphaBlend(
-                          scheme.scrim.withValues(alpha: 0.82),
-                          scheme.surfaceContainerHighest,
+              child: ColoredBox(
+                color: app.stage,
+                child: _error != null
+                    ? const _Message(
+                        'No se pudo leer la imagen. Elige otra captura.',
+                      )
+                    : c == null
+                    ? Center(
+                        child: CircularProgressIndicator(color: app.onPlate),
+                      )
+                    : _Stage(
+                        controller: c,
+                        focusNode: _focus,
+                        onAccept: _accept,
+                        palette: CropPalette(
+                          canvas: app.stage,
+                          scrim: Theme.of(context).colorScheme.scrim
+                              .withValues(alpha: 0.5),
+                          accent: app.plate,
+                          light: app.onPlate,
+                          dark: app.shell,
                         ),
-                        scrim: scheme.scrim.withValues(alpha: 0.5),
-                        accent: scheme.primary,
-                        light: BoardMarks.paper,
-                        dark: BoardMarks.pieceBlack,
+                        showFocusRing:
+                            _focus.hasFocus &&
+                            FocusManager.instance.highlightMode ==
+                                FocusHighlightMode.traditional,
                       ),
-                      showFocusRing:
-                          _focus.hasFocus &&
-                          FocusManager.instance.highlightMode ==
-                              FocusHighlightMode.traditional,
-                    ),
+              ),
             ),
             _BottomBar(onReset: c?.reset, onAccept: c == null ? null : _accept),
           ],
@@ -164,7 +176,12 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) => Center(
     child: Padding(
       padding: const EdgeInsets.all(Space.xl),
-      child: Text(text, style: Theme.of(context).textTheme.bodyLarge),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodyLarge
+            ?.copyWith(color: AppTheme.of(context).onPlate),
+      ),
     ),
   );
 }
@@ -275,14 +292,14 @@ class _ZoomButtonsState extends State<_ZoomButtons> {
                 children: [
                   IconButton.filledTonal(
                     key: const ValueKey('zoom-in'),
-                    icon: const Icon(Icons.add),
+                    icon: const AppIcon(AppIcons.zoomIn),
                     tooltip: 'Acercar',
                     onPressed: controller.canZoomIn ? controller.zoomIn : null,
                   ),
                   const SizedBox(height: Space.sm),
                   IconButton.filledTonal(
                     key: const ValueKey('zoom-out'),
-                    icon: const Icon(Icons.remove),
+                    icon: const AppIcon(AppIcons.zoomOut),
                     tooltip: 'Alejar',
                     onPressed: controller.canZoomOut
                         ? controller.zoomOut
@@ -291,7 +308,7 @@ class _ZoomButtonsState extends State<_ZoomButtons> {
                   const SizedBox(height: Space.sm),
                   IconButton.filledTonal(
                     key: const ValueKey('zoom-fit'),
-                    icon: const Icon(Icons.fit_screen),
+                    icon: const AppIcon(AppIcons.fitAll),
                     tooltip: 'Ver toda la imagen',
                     onPressed: controller.canZoomOut
                         ? controller.fitView
@@ -346,6 +363,7 @@ class _BottomBar extends StatelessWidget {
     );
     final accept = FilledButton(
       key: const ValueKey('crop-accept'),
+      style: plateButtonStyle(context),
       onPressed: onAccept,
       child: const Text('Leer este tablero'),
     );
