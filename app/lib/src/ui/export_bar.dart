@@ -1,5 +1,5 @@
 // The export bar pinned at the bottom of the session, ONE row: how many diagrams (and how many of them have
-// warnings), "Guardar .pgn", "Compartir" (Android only), "Copiar PGN" and, at the end, "Añadir captura"
+// warnings), "Guardar .pgn", "Compartir" (Android only) or, where there is no share (Windows), "Copiar PGN" and, at the end, "Añadir captura"
 // ([trailing]: the extended plate FAB from 600 dp, a 48 dp plate icon button on a phone), so the one primary
 // action and the exports read as one bar and nothing floats over the blocks. Where the labels do not fit they
 // turn into icon buttons with tooltips (the share label first, then the save label) instead of wrapping.
@@ -129,7 +129,9 @@ class ExportBar extends StatelessWidget {
               final fixed =
                   left +
                   Space.md +
-                  minTarget + // copy
+                  (canShare
+                      ? 0
+                      : minTarget) + // copy (the share sheet already offers it)
                   (trailing == null ? 0 : trailingWidth + Space.sm);
               final saveFull = saveLabel + _saveExtra;
               final shareFull = shareLabel + _shareExtra;
@@ -184,18 +186,19 @@ class ExportBar extends StatelessWidget {
                         icon: const AppIcon(AppIcons.share),
                       ),
                   ],
-                  IconButton(
-                    key: const ValueKey('copy-all'),
-                    tooltip: 'Copiar PGN',
-                    onPressed: () => unawaited(
-                      actions.copy(
-                        context,
-                        actions.session.allPgn,
-                        'PGN de ${ExportBar.countText(count)} copiado',
+                  if (!canShare)
+                    IconButton(
+                      key: const ValueKey('copy-all'),
+                      tooltip: 'Copiar PGN',
+                      onPressed: () => unawaited(
+                        actions.copy(
+                          context,
+                          actions.session.allPgn,
+                          'PGN de ${ExportBar.countText(count)} copiado',
+                        ),
                       ),
+                      icon: const AppIcon(AppIcons.copy),
                     ),
-                    icon: const AppIcon(AppIcons.copy),
-                  ),
                   if (trailing != null) ...[
                     const SizedBox(width: Space.sm),
                     trailing!,

@@ -206,7 +206,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.byTooltip('Guardar .pgn'), findsOneWidget);
-      final bar = tester.getRect(find.byKey(const ValueKey('copy-all')));
+      final bar = tester.getRect(find.byKey(const ValueKey('share-all')));
       expect(bar.right, lessThanOrEqualTo(360));
       expect(tester.takeException(), isNull);
     },

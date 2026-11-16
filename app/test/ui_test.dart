@@ -639,17 +639,26 @@ void main() {
       expect(find.text('PGN de 2 diagramas copiado'), findsOneWidget);
     });
 
-    testWidgets('Copiar PGN is an icon button of the bar, with a tooltip', (
+    testWidgets('Android: the bar has no Copiar PGN (the share sheet has it)', (
       tester,
     ) async {
-      final home = await one(tester);
-      expect(find.byKey(const ValueKey('copy-all')), findsOneWidget);
-      expect(find.byTooltip('Copiar PGN'), findsWidgets);
-      await tester.tap(find.byKey(const ValueKey('copy-all')));
-      await tester.pumpAndSettle();
-      expect(home.clipboard, home.session.allPgn);
-      expect(find.text('PGN de 2 diagramas copiado'), findsOneWidget);
+      await one(tester);
+      expect(find.byKey(const ValueKey('copy-all')), findsNothing);
+      expect(find.byKey(const ValueKey('share-all')), findsOneWidget);
     });
+
+    testWidgets(
+      'Windows: Copiar PGN is an icon button of the bar, with a tooltip',
+      (tester) async {
+        final home = await one(tester, canShare: false);
+        expect(find.byKey(const ValueKey('copy-all')), findsOneWidget);
+        expect(find.byTooltip('Copiar PGN'), findsWidgets);
+        await tester.tap(find.byKey(const ValueKey('copy-all')));
+        await tester.pumpAndSettle();
+        expect(home.clipboard, home.session.allPgn);
+        expect(find.text('PGN de 2 diagramas copiado'), findsOneWidget);
+      },
+    );
 
     testWidgets('a clean session shows no warning', (tester) async {
       await one(tester);

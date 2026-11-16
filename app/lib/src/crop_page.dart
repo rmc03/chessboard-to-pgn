@@ -283,6 +283,15 @@ class _ZoomButtonsState extends State<_ZoomButtons> {
               : controller.screenRect.inflate(24);
           bool hits(bool left) => sel.overlaps(column(left));
           if (hits(_left) && !hits(!_left)) _left = !_left;
+          // A disabled button keeps the surface fill and only dims its icon, so the three always read as a group
+          // on the dark stage (the default disabled fill is nearly transparent).
+          final scheme = Theme.of(context).colorScheme;
+          final style = IconButton.styleFrom(
+            backgroundColor: scheme.surfaceContainer,
+            foregroundColor: scheme.onSurface,
+            disabledBackgroundColor: scheme.surfaceContainer,
+            disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.4),
+          );
           return Align(
             alignment: _left ? Alignment.bottomLeft : Alignment.bottomRight,
             child: Padding(
@@ -291,6 +300,7 @@ class _ZoomButtonsState extends State<_ZoomButtons> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton.filledTonal(
+                    style: style,
                     key: const ValueKey('zoom-in'),
                     icon: const AppIcon(AppIcons.zoomIn),
                     tooltip: 'Acercar',
@@ -298,6 +308,7 @@ class _ZoomButtonsState extends State<_ZoomButtons> {
                   ),
                   const SizedBox(height: Space.sm),
                   IconButton.filledTonal(
+                    style: style,
                     key: const ValueKey('zoom-out'),
                     icon: const AppIcon(AppIcons.zoomOut),
                     tooltip: 'Alejar',
@@ -307,6 +318,7 @@ class _ZoomButtonsState extends State<_ZoomButtons> {
                   ),
                   const SizedBox(height: Space.sm),
                   IconButton.filledTonal(
+                    style: style,
                     key: const ValueKey('zoom-fit'),
                     icon: const AppIcon(AppIcons.fitAll),
                     tooltip: 'Ver toda la imagen',

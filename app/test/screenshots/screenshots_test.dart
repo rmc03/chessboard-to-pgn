@@ -33,23 +33,19 @@ void main() {
         for (final scale in scales) {
           final label =
               '${scene.name} ${brightness.name} ${device.name}${scale == 1 ? '' : ' x$scale'}';
-          testWidgets(
-            label,
-            skip: !enabled,
-            (tester) async {
-              final file = await renderScene(
-                tester,
-                scene,
-                brightness: brightness,
-                device: device,
-                dir: dir!,
-                catalog: catalog,
-                textScale: scale,
-              );
-              // ignore: avoid_print
-              print('wrote $dir/$file');
-            },
-          );
+          testWidgets(label, skip: !enabled, (tester) async {
+            final file = await renderScene(
+              tester,
+              scene,
+              brightness: brightness,
+              device: device,
+              dir: dir!,
+              catalog: catalog,
+              textScale: scale,
+            );
+            // ignore: avoid_print
+            print('wrote $dir/$file');
+          });
         }
       }
     }

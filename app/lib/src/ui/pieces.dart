@@ -187,7 +187,8 @@ class PieceSetCatalog extends ChangeNotifier {
     try {
       final list = jsonDecode(await b.loadString('assets/pieces/sets.json'));
       final svgSets = [
-        for (final e in list as List) PieceSet.fromJson(e as Map<String, dynamic>),
+        for (final e in list as List)
+          PieceSet.fromJson(e as Map<String, dynamic>),
       ];
       return PieceSetCatalog(svgSets, bundle: b);
     } catch (e) {
@@ -299,8 +300,11 @@ void paintPiece(
   if (!set.builtIn) {
     final info = catalog.picture(set.id, cls);
     if (info != null) {
-      final s = rect.shortestSide /
-          (info.size.width > info.size.height ? info.size.width : info.size.height);
+      final s =
+          rect.shortestSide /
+          (info.size.width > info.size.height
+              ? info.size.width
+              : info.size.height);
       canvas.save();
       canvas.translate(
         rect.left + (rect.width - info.size.width * s) / 2,
@@ -369,7 +373,9 @@ class _PieceViewState extends State<PieceView> {
     final scope = AppScope.maybeOf(context);
     _catalog = widget.catalog ?? scope?.catalog ?? _builtIn;
     _setId =
-        widget.setId ?? scope?.settings.pieceSetId ?? PieceSetCatalog.fallbackId;
+        widget.setId ??
+        scope?.settings.pieceSetId ??
+        PieceSetCatalog.fallbackId;
     unawaited(_catalog.ensureLoaded(_setId));
   }
 

@@ -268,7 +268,7 @@ void main() {
           reason: 'the shape of the FAB, so it reads as one family',
         );
         // at the end of the bar, on the row of the exports
-        final copy = tester.getRect(find.byKey(const ValueKey('copy-all')));
+        final copy = tester.getRect(find.byKey(const ValueKey('share-all')));
         final rect = tester.getRect(add);
         expect(rect.left, greaterThanOrEqualTo(copy.right));
         expect(rect.center.dy, closeTo(copy.center.dy, 1));
@@ -277,6 +277,23 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.getRect(add), rect);
         expect(find.byType(FloatingActionButton), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'at 412 dp (text 1.0) "Guardar .pgn" keeps its label, in one row',
+      (tester) async {
+        await long(tester, size: const Size(412, 700));
+        final save = find.byKey(const ValueKey('save-pgn'));
+        expect(
+          find.descendant(of: save, matching: find.text('Guardar .pgn')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('copy-all')), findsNothing);
+        final add = tester.getRect(find.byKey(const ValueKey('add-capture')));
+        expect(tester.getRect(save).right, lessThanOrEqualTo(add.left));
+        expect(add.right, lessThanOrEqualTo(412));
+        expect(tester.takeException(), isNull);
       },
     );
 
@@ -330,7 +347,7 @@ void main() {
       final bar = tester.getRect(
         find
             .ancestor(
-              of: find.byKey(const ValueKey('copy-all')),
+              of: find.byKey(const ValueKey('save-pgn')),
               matching: find.byType(Material),
             )
             .first,
@@ -356,7 +373,6 @@ void main() {
           final buttons = [
             tester.getCenter(bar).dy,
             tester.getCenter(find.byKey(const ValueKey('share-all'))).dy,
-            tester.getCenter(find.byKey(const ValueKey('copy-all'))).dy,
             tester.getCenter(find.byKey(const ValueKey('add-capture'))).dy,
           ];
           for (final c in buttons) {
@@ -374,7 +390,7 @@ void main() {
           expect(summary.center.dy, closeTo(buttons.first, 6));
           expect(summary.right, lessThanOrEqualTo(tester.getRect(bar).left));
           expect(
-            tester.getRect(find.byKey(const ValueKey('copy-all'))).right,
+            tester.getRect(find.byKey(const ValueKey('share-all'))).right,
             lessThanOrEqualTo(
               tester.getRect(find.byKey(const ValueKey('add-capture'))).left,
             ),
@@ -391,7 +407,6 @@ void main() {
           if (scale > 1.15) {
             expect(find.byTooltip('Guardar .pgn'), findsOneWidget);
             expect(find.byTooltip('Compartir o copiar PGN'), findsWidgets);
-            expect(find.byTooltip('Copiar PGN'), findsWidgets);
           }
         },
       );
@@ -507,7 +522,6 @@ void main() {
         'Compartir o copiar PGN',
         'Quitar diagrama',
         'Copiar FEN',
-        'Copiar PGN',
       ]) {
         final node = tester.getSemantics(find.byTooltip(label).first);
         final data = node.getSemanticsData();
